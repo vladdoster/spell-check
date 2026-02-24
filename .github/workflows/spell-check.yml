@@ -21,7 +21,15 @@ jobs:
 
       - name: Clone repository
         run: gh repo clone "${{ github.event.inputs.repository }}" target-repo
-
+      - name: Set up Python $
+        uses: actions/setup-python@v2
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install codespell
+      - name: Check spelling with codespell
+        working-directory: target-repo
+        run: codespell **/*.md[x] --write-changes || exit 1
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
@@ -31,6 +39,7 @@ jobs:
           else
             echo "found_issues=true" >> "$GITHUB_OUTPUT"
           fi
+          
 
       - name: Fork repository
         if: steps.cspell.outputs.found_issues == 'true'
