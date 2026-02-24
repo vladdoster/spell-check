@@ -1,0 +1,55 @@
+name: Spell Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Repository slug (user/repo)"
+        required: true
+        type: string
+
+jobs:
+  spellcheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install cspell
+        run: npm install -g cspell
+
+      - name: Clone repository
+        run: gh repo clone "${{ github.event.inputs.repository }}" target-repo
+
+      - name: Run cspell on markdown files
+        id: cspell
+        working-directory: target-repo
+        run: |
+          if cspell "**/*.md"; then
+            echo "found_issues=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found_issues=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fork repository
+        if: steps.cspell.outputs.found_issues == 'true'
+        working-directory: target-repo
+        run: |
+          gh repo fork "${{ github.event.inputs.repository }}" --clone=false
+          REPO_NAME=$(echo "${{ github.event.inputs.repository }}" | cut -d'/' -f2)
+          git remote set-url origin "https://github.com/${{ github.repository_owner }}/${REPO_NAME}.git"
+
+      - name: Commit and push changes
+        if: steps.cspell.outputs.found_issues == 'true'
+        working-directory: target-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changed files to commit"
+          else
+            git commit -m "fix: correct spelling in markdown files"
+            git push origin HEAD
+          fi
