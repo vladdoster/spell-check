@@ -26,7 +26,7 @@ jobs:
         id: cspell
         working-directory: target-repo
         run: |
-          if cspell "**/*.md"; then
+          if cspell "**/*.md[x]"; then
             echo "found_issues=false" >> "$GITHUB_OUTPUT"
           else
             echo "found_issues=true" >> "$GITHUB_OUTPUT"
