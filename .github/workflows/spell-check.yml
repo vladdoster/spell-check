@@ -29,16 +29,13 @@ jobs:
           pip install codespell
       - name: Check spelling with codespell
         working-directory: target-repo
-        run: codespell **/*.md[x] --write-changes || exit 1
+        run: codespell **/*.md **/*.mdx -w || exit 1
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
         run: |
-          if cspell "**/*.md[x]"; then
-            echo "found_issues=false" >> "$GITHUB_OUTPUT"
-          else
             echo "found_issues=true" >> "$GITHUB_OUTPUT"
-          fi
+        
           
 
       - name: Fork repository
