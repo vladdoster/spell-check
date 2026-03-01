@@ -31,7 +31,6 @@ jobs:
         working-directory: target-repo
         run: |
           find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec codespell -w {} +
-          #codespell **/*.md **/*.mdx **/*.txt -w || exit 1
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
