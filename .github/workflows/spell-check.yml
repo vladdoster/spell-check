@@ -58,6 +58,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changed files to commit"
           else
-            git commit -m "fix: correct spelling in markdown files"
+            git commit -m "docs: correct spelling"
             git push origin HEAD
           fi
