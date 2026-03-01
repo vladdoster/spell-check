@@ -50,8 +50,9 @@ jobs:
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{github.repository_owner}}"
+          git config user.email "$(gh api user/public_emails -q '.[0].email')"
+
           git add -A
           if git diff --cached --quiet; then
             echo "No changed files to commit"
