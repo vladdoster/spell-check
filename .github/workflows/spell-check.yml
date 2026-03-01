@@ -29,7 +29,10 @@ jobs:
           pip install codespell
       - name: Check spelling with codespell
         working-directory: target-repo
-        run: codespell **/*.md **/*.mdx **/*.txt -w || exit 1
+        run: |
+          # find . -type f \( -name "*.mdx" -o -name "*.md" -o -name "*.txt" \) -exec grep -H "Draft" {} +
+          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec codespell -w {} +
+          #codespell **/*.md **/*.mdx **/*.txt -w || exit 1
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
