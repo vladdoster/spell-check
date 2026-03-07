@@ -17,9 +17,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GH_PAT }}
     steps:
       - name: Clone repository
-        run: |
-          gh repo clone "${{ github.event.inputs.repository }}" target-repo
-          echo "${{ github.event.inputs.repository }}" >> "${GITHUB_SUMMARY}"
+        run: gh repo clone "${{ github.event.inputs.repository }}" target-repo
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -30,6 +28,7 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
+          echo "${{ github.event.inputs.repository }}" >> ${GITHUB_SUMMARY}
           find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
       - name: Run cspell on markdown files
         id: cspell
