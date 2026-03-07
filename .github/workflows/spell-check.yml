@@ -19,8 +19,10 @@ jobs:
       - name: Clone repository
         id: repo
         run: |
+          echo "### [${{ github.event.inputs.repository }}](${{ github.event.inputs.repository }})" >> "${GITHUB_STEP_SUMMARY}"
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
           echo "repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
+          echo "repoName=$(gh repo view --json name --jq '.name' ${trimmed})" >> "$GITHUB_OUTPUT"
           gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
           gh repo clone "${{ github.event.inputs.repository }}" target-repo
       - name: Install uv
@@ -31,7 +33,6 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          echo "# [${{ github.event.inputs.repository }}](${{ github.event.inputs.repository }})" >> "${GITHUB_STEP_SUMMARY}"
           #find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
           find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec sh -c 'yes "0" | uvx codespell -i 2 -w "$@"' sh {} +
 
@@ -52,7 +53,7 @@ jobs:
         working-directory: target-repo
         run: |
           gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false --remote=true
-          git remote set-url origin "https://github.com/${{ steps.repo.outputs.repo }}.git"
+          git remote set-url origin "https://github.com/${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}.git"
 
       - name: Commit and push changes
         if: steps.cspell.outputs.found_issues == 'true'
