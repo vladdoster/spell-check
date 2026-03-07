@@ -28,7 +28,7 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec uvx codespell -w {} +
+          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec uvx codespell -i 2 -w {} +
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
