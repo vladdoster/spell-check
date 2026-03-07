@@ -37,7 +37,11 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec sh -c 'yes "0" | uvx codespell -i 2 -w "$@"' sh {} +
+          find . \
+            -type f \
+            -regextype posix-egrep \
+            -regex ".*\.(mdx|md|txt)$" \
+            -exec sh -c 'yes " " | uvx codespell -i 2 -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
@@ -70,3 +74,4 @@ jobs:
           git add -A
           git commit -m "docs: correct spelling"
           git push origin HEAD
+          echo "### [${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}](https://github.com/${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}.git)" >> "${GITHUB_STEP_SUMMARY}"
