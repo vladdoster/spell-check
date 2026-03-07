@@ -29,7 +29,9 @@ jobs:
         working-directory: target-repo
         run: |
           echo "# [${{ github.event.inputs.repository }}](${{ github.event.inputs.repository }})" >> "${GITHUB_STEP_SUMMARY}"
-          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
+          #find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
+          find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec sh -c 'yes "0" | uvx codespell -i 2 -w "$@"' sh {} +
+
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
