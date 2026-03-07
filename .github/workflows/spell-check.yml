@@ -20,8 +20,8 @@ jobs:
         id: repo
         run: |
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
-          echo "repo=$(gh repo view  -q '.[0].nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
-          gh repo view  -q '.[0].nameWithOwner' ${trimmed} 
+          echo "repo=$(gh repo view --json nameWithOwner --jq '.[0].nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
+          gh repo view  --json nameWithOwner --jq '.[0].nameWithOwner' ${trimmed} 
           gh repo clone "${repo}" target-repo
       - name: Install uv
         uses: astral-sh/setup-uv@v7
