@@ -48,7 +48,7 @@ jobs:
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          gh repo fork "${{ github.event.inputs.repository }}" --clone=false --remote=true
+          gh repo fork "${{ github.event.inputs.repository }}" --clone=false --remote=true -remote-name=fork
           REPO_NAME=$(echo "${{ github.event.inputs.repository }}" | cut -d'/' -f2)
           # git remote set-url origin "https://github.com/${{ github.repository_owner }}/${REPO_NAME}.git"
 
@@ -61,5 +61,5 @@ jobs:
             echo "No changed files to commit"
           else
             git commit -m "docs: correct spelling"
-            git push origin HEAD
+            git push fork HEAD
           fi
