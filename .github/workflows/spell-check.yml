@@ -44,7 +44,7 @@ jobs:
         working-directory: target-repo
         run: |
           changes=false
-          if git diff --exit-code --quiet; then
+          if ! git diff --exit-code --quiet; then
             changes=true
           fi
           echo "found changed files to commit: ${changes}"
