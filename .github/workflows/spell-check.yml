@@ -7,6 +7,10 @@ on:
         description: "Repository slug (user/repo)"
         required: true
         type: string
+      ignore:
+        description: "Space seperated list of words to ignore"
+        required: false
+        type: string       
 
 jobs:
   spellcheck:
@@ -37,11 +41,13 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
+          printf '%s\n' ${{ github.event.inputs.ignore }} > ignore.txt
+          cat ignore.txt
           find . \
             -type f \
             -regextype posix-egrep \
             -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell -i 2 -w "$@"' sh {} +
+            -exec sh -c 'yes " " | uvx codespell -I ignore.txt -i 2 -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
