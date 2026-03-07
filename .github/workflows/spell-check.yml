@@ -20,9 +20,9 @@ jobs:
         id: repo
         run: |
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
-          repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
-          repoName=$(gh repo view --json name --jq '.name' ${trimmed})"
-          repoUrl=$(gh repo view --json url --jq '.url' ${trimmed})"
+          repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
+          repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
+          repoUrl="$(gh repo view --json url --jq '.url' ${trimmed})"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
