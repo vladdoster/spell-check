@@ -41,14 +41,14 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          printf '%s\n' ${{ github.event.inputs.ignore }} > ignore.txt
+          printf '%s\n' ${{ github.event.inputs.ignore }} > /tmp/ignore.txt
           echo '- Ignored: `${{ github.event.inputs.ignore }}`' >> "${GITHUB_STEP_SUMMARY}"
           cat ignore.txt
           find . \
             -type f \
             -regextype posix-egrep \
             -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell -I ignore.txt -i 2 -w "$@"' sh {} +
+            -exec sh -c 'yes " " | uvx codespell -I /tmp/ignore.txt -i 2 -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
@@ -78,7 +78,8 @@ jobs:
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
+          git switch --force-create docs/fix-spelling
           git add -A
           git commit -m "docs: correct spelling"
-          git push origin HEAD
+          git push origin docs/fix-spelling
           echo "### [${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}](https://github.com/${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}.git)" >> "${GITHUB_STEP_SUMMARY}"
