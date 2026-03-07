@@ -28,7 +28,7 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          echo "${{ github.event.inputs.repository }}" >> ${GITHUB_SUMMARY}
+          echo "${{ github.event.inputs.repository }}" > "${GITHUB_SUMMARY}"
           find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
       - name: Run cspell on markdown files
         id: cspell
