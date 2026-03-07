@@ -20,8 +20,8 @@ jobs:
         id: repo
         run: |
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
-          echo "repo=$(gh repo view  --jq '.[0].nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
-          gh repo view  --jq '.[0].nameWithOwner' ${trimmed} 
+          echo "repo=$(gh repo view  -q '.[0].nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
+          gh repo view  -q '.[0].nameWithOwner' ${trimmed} 
           gh repo clone "${repo}" target-repo
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -44,7 +44,7 @@ jobs:
       - name: Setup credentials to access private repositories
         run: |
           git config --global user.name "${{github.repository_owner}}"
-          git config --global user.email "$(gh api user/public_emails --jq '.[0].email')"
+          git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
 
       - name: Fork repository
