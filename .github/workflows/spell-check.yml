@@ -48,9 +48,9 @@ jobs:
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          gh repo fork "${{ github.event.inputs.repository }}" --clone=false
+          gh repo fork "${{ github.event.inputs.repository }}" --clone=false --remote=true
           REPO_NAME=$(echo "${{ github.event.inputs.repository }}" | cut -d'/' -f2)
-          git remote set-url origin "https://github.com/${{ github.repository_owner }}/${REPO_NAME}.git"
+          # git remote set-url origin "https://github.com/${{ github.repository_owner }}/${REPO_NAME}.git"
 
       - name: Commit and push changes
         if: steps.cspell.outputs.found_issues == 'true'
