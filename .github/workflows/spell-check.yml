@@ -19,12 +19,16 @@ jobs:
       - name: Clone repository
         id: repo
         run: |
-          echo "### [${{ github.event.inputs.repository }}](${{ github.event.inputs.repository }})" >> "${GITHUB_STEP_SUMMARY}"
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
-          echo "repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
-          echo "repoName=$(gh repo view --json name --jq '.name' ${trimmed})" >> "$GITHUB_OUTPUT"
+          repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
+          repoName=$(gh repo view --json name --jq '.name' ${trimmed})"
+          repoUrl=$(gh repo view --json url --jq '.url' ${trimmed})"
+          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
+          echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
+          echo "### [${repo}](${repoUrl})" >> "${GITHUB_STEP_SUMMARY}"
           gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
-          gh repo clone "${{ github.event.inputs.repository }}" target-repo
+          gh repo clone "${repo}" target-repo
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -33,15 +37,19 @@ jobs:
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          #find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec yes "0" | uvx codespell -i 2 -w {} +
           find . -type f -regextype posix-egrep -regex ".*\.(mdx|md|txt)$" -exec sh -c 'yes "0" | uvx codespell -i 2 -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
         working-directory: target-repo
         run: |
-            echo "found_issues=true" >> "$GITHUB_OUTPUT"
-     
+          changes=false
+          if git diff --exit-code --quiet; then
+            changes=true
+          fi
+          echo "found changed files to commit: ${changes}"
+          echo "found_issues=${changes}" >> "$GITHUB_OUTPUT"
+          
       - name: Setup credentials to access private repositories
         run: |
           git config --global user.name "${{github.repository_owner}}"
@@ -60,9 +68,5 @@ jobs:
         working-directory: target-repo
         run: |
           git add -A
-          if git diff --cached --quiet; then
-            echo "No changed files to commit"
-          else
-            git commit -m "docs: correct spelling"
-            git push origin HEAD
-          fi
+          git commit -m "docs: correct spelling"
+          git push origin HEAD
