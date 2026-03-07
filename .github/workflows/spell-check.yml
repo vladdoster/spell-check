@@ -42,6 +42,7 @@ jobs:
         working-directory: target-repo
         run: |
           printf '%s\n' ${{ github.event.inputs.ignore }} > ignore.txt
+          echo "- Ignored: `${{ github.event.inputs.ignore }}`" >> "${GITHUB_STEP_SUMMARY}"
           cat ignore.txt
           find . \
             -type f \
