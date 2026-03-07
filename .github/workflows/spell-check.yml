@@ -17,7 +17,12 @@ jobs:
       GH_TOKEN: ${{ secrets.GH_PAT }}
     steps:
       - name: Clone repository
-        run: gh repo clone "${{ github.event.inputs.repository }}" target-repo
+        id: repo
+        run: |
+          trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
+          echo "repo=$(gh repo view  --jq '.[0].nameWithOwner' ${trimmed})" >> "$GITHUB_OUTPUT"
+          gh repo view  --jq '.[0].nameWithOwner' ${trimmed} 
+          gh repo clone "${repo}" target-repo
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -39,16 +44,15 @@ jobs:
       - name: Setup credentials to access private repositories
         run: |
           git config --global user.name "${{github.repository_owner}}"
-          git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
+          git config --global user.email "$(gh api user/public_emails --jq '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
 
       - name: Fork repository
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          gh repo fork "${{ github.event.inputs.repository }}" --clone=false --remote=true
-          REPO_NAME=$(echo "${{ github.event.inputs.repository }}" | cut -d'/' -f2)
-          git remote set-url origin "https://github.com/${{ github.repository_owner }}/${REPO_NAME}.git"
+          gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false --remote=true
+          git remote set-url origin "https://github.com/${{ steps.repo.outputs.repo }}.git"
 
       - name: Commit and push changes
         if: steps.cspell.outputs.found_issues == 'true'
