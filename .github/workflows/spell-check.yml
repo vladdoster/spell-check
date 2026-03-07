@@ -43,7 +43,7 @@ jobs:
         run: |
           printf '%s\n' ${{ github.event.inputs.ignore }} > /tmp/ignore.txt
           echo '- Ignored: `${{ github.event.inputs.ignore }}`' >> "${GITHUB_STEP_SUMMARY}"
-          cat ignore.txt
+          cat /tmp/ignore.txt
           find . \
             -type f \
             -regextype posix-egrep \
