@@ -23,6 +23,7 @@ jobs:
       - name: Clone repository
         id: repo
         run: |
+          echo "::group::clean input"
           trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
           repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
           repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
@@ -30,9 +31,10 @@ jobs:
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
-          echo "### [${repo}](${repoUrl})" >> "${GITHUB_STEP_SUMMARY}"
+          printf '### [%s](%s)\n' "${repo}" ${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
           gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
           gh repo clone "${repo}" target-repo
+          echo "::endgroup::"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -52,16 +54,19 @@ jobs:
 
       - name: Run cspell on markdown files
         id: cspell
+        env:
+          changes: false
         working-directory: target-repo
         run: |
-          changes=false
+          echo "::group::Check for changes"
           if ! git diff --exit-code --quiet; then
             changes=true
           fi
-          echo "found changed files to commit: ${changes}"
+          printf "found changed files to commit: %s" ${changes}
           echo "found_issues=${changes}" >> "$GITHUB_OUTPUT"
-          
+          echo "::endgroup::"
       - name: Setup credentials to access private repositories
+        if: steps.cspell.outputs.found_issues == 'true'
         run: |
           git config --global user.name "${{github.repository_owner}}"
           git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
