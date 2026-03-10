@@ -31,7 +31,7 @@ jobs:
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
-          printf '### [%s](%s)\n' "${repo}" ${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
+          printf '### [%s](%s)\n' "${repo}" "${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
           gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
           gh repo clone "${repo}" target-repo
           echo "::endgroup::"
