@@ -73,7 +73,7 @@ jobs:
             -type f \
             -regextype posix-egrep \
             -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell -I $FILE -i 2 -w "$@"' sh {} +
+            -exec sh -c 'yes " " | uvx codespell -I "$1" -i 2 -w "$@"' sh "$FILE" {} +
 
       - name: Run cspell on markdown files
         id: cspell
