@@ -49,6 +49,7 @@ jobs:
       - name: Checkout ${{ steps.repo.outputs.repo }}
         uses: actions/checkout@v6
         with:
+          token: ${{ secrets.GH_PAT }}  
           repository: ${{ steps.repo.outputs.repo }}
           path: target-repo
 
