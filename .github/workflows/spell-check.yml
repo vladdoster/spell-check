@@ -10,7 +10,11 @@ on:
       ignore:
         description: "Space seperated list of words to ignore"
         required: false
-        type: string       
+        type: string 
+      skip:
+        description: "comma-separated list of files to skip."
+        required: false
+        type: string
       delete_fork:
         description: 'Whether to delete fork'
         type: boolean
@@ -58,7 +62,8 @@ jobs:
         run: |
           my_string="${{ github.event.inputs.ignore }}"
           FILE=/tmp/ignore.txt
-          touch "$FILE"
+          CONFIG=/tmp/codespell.cfg
+          touch ${CONFIG} "${FILE}" 
           if [[ -z "$my_string" ]]; then
             echo "The string is empty."
           else
@@ -70,11 +75,13 @@ jobs:
               echo "File '$FILE' contains readable content."
             fi
           fi
+          printf '[codespell]\nskip = %s\nignore-words = %s\ninteractive = 2' "${{ github.event.inputs.skip }}" "${FILE}"> "$CONFIG"
+          cat "$CONFIG"
           find . \
             -type f \
             -regextype posix-egrep \
             -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell -I "$1" -i 2 -w "$@"' sh "$FILE" {} +
+            -exec sh -c 'yes " " | uvx codespell --config "/tmp/codespell.cfg" -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
