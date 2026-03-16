@@ -73,7 +73,7 @@ jobs:
               echo "File '$FILE' contains readable content."
             fi
           fi
-          printf '[codespell]\nignore-words = %s\ninteractive = 2' "${FILE}" > "$CONFIG"
+          printf '[codespell]\nignore-words = %s\ninteractive = 2\n' "${FILE}" > "$CONFIG"
           if [[ ! -z "${{ github.event.inputs.skip }}" ]]; then
             printf 'skip = %s' "${{ github.event.inputs.skip }}" >> "$CONFIG"
           fi
