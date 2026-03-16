@@ -120,7 +120,7 @@ jobs:
         run: |
           git switch --force-create docs/fix-spelling
           git add -A
-          git commit -m "docs: correct spelling"
+          git commit -m "docs: correct spelling" --signoff
           git push origin docs/fix-spelling
           printf "### [%s](%s)" ${{ steps.repo.outputs.repoFork }} ${{ steps.repo.outputs.repoForkUrl }} >> "${GITHUB_STEP_SUMMARY}"
 
