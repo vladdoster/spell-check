@@ -64,9 +64,7 @@ jobs:
           FILE=/tmp/ignore.txt
           CONFIG=/tmp/codespell.cfg
           touch ${CONFIG} "${FILE}" 
-          if [[ -z "$my_string" ]]; then
-            echo "The string is empty."
-          else
+          if [[ ! -z "$my_string" ]]; then
             printf '%s\n' ${{ github.event.inputs.ignore }} > "$FILE"
             if ! grep -q '[^[:space:]]' "$FILE"; then
               echo "File '$FILE' is empty or contains only whitespace."
@@ -75,7 +73,10 @@ jobs:
               echo "File '$FILE' contains readable content."
             fi
           fi
-          printf '[codespell]\nskip = %s\nignore-words = %s\ninteractive = 2' "${{ github.event.inputs.skip }}" "${FILE}"> "$CONFIG"
+          printf '[codespell]\nignore-words = %s\ninteractive = 2' "${FILE}" > "$CONFIG"
+          if [[ ! -z "${{ github.event.inputs.skip }}" ]]; then
+            printf 'skip = %s' "${{ github.event.inputs.skip }}" >> "$CONFIG"
+          fi
           cat "$CONFIG"
           find . \
             -type f \
