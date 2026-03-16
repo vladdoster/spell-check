@@ -75,7 +75,8 @@ jobs:
           fi
           printf '[codespell]\nignore-words = %s\ninteractive = 2\n' "${FILE}" > "$CONFIG"
           if [[ ! -z "${{ github.event.inputs.skip }}" ]]; then
-            printf 'skip = %s' "${{ github.event.inputs.skip }}" >> "$CONFIG"
+            printf 'skip = %s\n' "${{ github.event.inputs.skip }}" >> "$CONFIG"
+            echo '- Skipped: `${{ github.event.inputs.skip }}`' >> "${GITHUB_STEP_SUMMARY}"
           fi
           cat "$CONFIG"
           find . \
