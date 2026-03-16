@@ -57,10 +57,11 @@ jobs:
         run: |
           my_string="${{ github.event.inputs.ignore }}"
           FILE=/tmp/ignore.txt
+          touch "$FILE"
           if [[ -z "$my_string" ]]; then
             echo "The string is empty."
           else
-            printf '%s\n' ${{ github.event.inputs.ignore }} > /tmp/ignore.txt
+            printf '%s\n' ${{ github.event.inputs.ignore }} > "$FILE"
             if ! grep -q '[^[:space:]]' "$FILE"; then
               echo "File '$FILE' is empty or contains only whitespace."
             else
