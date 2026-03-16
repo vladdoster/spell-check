@@ -35,27 +35,44 @@ jobs:
           repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
           repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
           repoUrl="$(gh repo view --json url --jq '.url' ${trimmed})"
+          repoFork="${{github.repository_owner}}/${repoName}"
+          repoForkUrl="https://github.com/${repoFork}.git"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
-          echo "repoFork=${{github.repository_owner}}/${repoName}" >> "$GITHUB_OUTPUT"
-          echo "repoForkUrl=https://github.com/${repoFork}.git" >> "$GITHUB_OUTPUT"
+          echo "repoFork=${repoFork}" >> "$GITHUB_OUTPUT"
+          echo "repoForkUrl=${repoForkUrl}" >> "$GITHUB_OUTPUT"
           printf '### [%s](%s)\n' "${repo}" "${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
           gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
-          gh repo clone "${repo}" target-repo
           echo "::endgroup::"
+    
+      - name: Checkout ${{ steps.repo.outputs.repo }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.repo.outputs.repo }}
+          path: target-repo
 
       - name: Check spelling with codespell
         working-directory: target-repo
         run: |
-          printf '%s\n' ${{ github.event.inputs.ignore }} > /tmp/ignore.txt
-          echo '- Ignored: `${{ github.event.inputs.ignore }}`' >> "${GITHUB_STEP_SUMMARY}"
-          cat /tmp/ignore.txt
+          my_string="${{ github.event.inputs.ignore }}"
+          FILE=/tmp/ignore.txt
+          if [[ -z "$my_string" ]]; then
+            echo "The string is empty."
+          else
+            printf '%s\n' ${{ github.event.inputs.ignore }} > /tmp/ignore.txt
+            if ! grep -q '[^[:space:]]' "$FILE"; then
+              echo "File '$FILE' is empty or contains only whitespace."
+            else
+              echo '- Ignored: `${{ github.event.inputs.ignore }}`' >> "${GITHUB_STEP_SUMMARY}"
+              echo "File '$FILE' contains readable content."
+            fi
+          fi
           find . \
             -type f \
             -regextype posix-egrep \
             -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell -I /tmp/ignore.txt -i 2 -w "$@"' sh {} +
+            -exec sh -c 'yes " " | uvx codespell -I $FILE -i 2 -w "$@"' sh {} +
 
       - name: Run cspell on markdown files
         id: cspell
