@@ -110,7 +110,7 @@ jobs:
         if: steps.cspell.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false --remote=true
+          gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false
           git remote set-url origin "https://github.com/${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}.git"
 
       - name: Commit and push changes
