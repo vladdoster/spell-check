@@ -168,9 +168,10 @@ run_spell_check() {
 
   local ignore_file="/tmp/ignore.txt"
   local config_file="/tmp/codespell.cfg"
+  typeset -g changes_report="/tmp/spell-changes-report.txt"
 
   # Create files
-  touch "$config_file" "$ignore_file"
+  touch "$config_file" "$ignore_file" "$changes_report"
 
   # Handle ignore words
   if [[ -n "$ignore_words" ]]; then
@@ -196,6 +197,10 @@ run_spell_check() {
   info "Codespell configuration:"
   cat "$config_file"
 
+  # Save current state before running codespell
+  git add -A 2>/dev/null || true
+  git stash push -m "before-spell-check" 2>/dev/null || true
+
   # Run codespell on markdown and text files
   find . \
     -type f \
@@ -204,12 +209,82 @@ run_spell_check() {
     -exec sh -c 'yes " " | uvx codespell --config "/tmp/codespell.cfg" -w "$@"' sh {} +
 }
 
+# Generate spell check report
+generate_spell_report() {
+  info "Generating spell check report..."
+
+  local report_file="/tmp/spell-changes-report.txt"
+  local summary_file="/tmp/spell-summary.txt"
+
+  # Clear previous reports
+  > "$report_file"
+  > "$summary_file"
+
+  # Get list of changed files
+  local -a changed_files
+  changed_files=($(git diff --name-only))
+
+  if (( ${#changed_files} == 0 )); then
+    return 1
+  fi
+
+  printf "${GREEN}=== SPELL CHECK REPORT ===${NC}\n\n" | tee -a "$report_file"
+  printf "Total files modified: %d\n\n" "${#changed_files}" | tee -a "$report_file"
+
+  local total_changes=0
+
+  # Process each changed file
+  for file in "${changed_files[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      continue
+    fi
+
+    # Get the diff for this file
+    local file_diff=$(git diff "$file")
+
+    if [[ -z "$file_diff" ]]; then
+      continue
+    fi
+
+    printf "${YELLOW}File: %s${NC}\n" "$file" | tee -a "$report_file"
+    printf "─%.0s" {1..60} | tee -a "$report_file"
+    printf "\n" | tee -a "$report_file"
+
+    # Extract and display word changes (- lines = before, + lines = after)
+    local line_num=0
+    local changes_in_file=0
+
+    # Parse diff output to show before/after
+    echo "$file_diff" | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+)' | while IFS= read -r line; do
+      if [[ "$line" =~ ^- ]]; then
+        printf "  ${RED}BEFORE: %s${NC}\n" "${line:1}" | tee -a "$report_file"
+      elif [[ "$line" =~ ^+ ]]; then
+        printf "  ${GREEN}AFTER:  %s${NC}\n" "${line:1}" | tee -a "$report_file"
+        printf "\n" | tee -a "$report_file"
+        ((changes_in_file++))
+      fi
+    done
+
+    total_changes=$((total_changes + changes_in_file))
+    printf "\n" | tee -a "$report_file"
+  done
+
+  printf "${GREEN}=== SUMMARY ===${NC}\n" | tee -a "$report_file"
+  printf "Total spelling corrections: %d\n" "$total_changes" | tee -a "$report_file"
+  printf "Total files corrected: %d\n\n" "${#changed_files}" | tee -a "$report_file"
+
+  info "Full report saved to: $report_file"
+
+  return 0
+}
+
 # Check for changes
 check_for_changes() {
   info "Checking for changes..."
 
   if ! git diff --exit-code --quiet; then
     info "Found spelling errors that were corrected"
+    generate_spell_report
     return 0
   else
     info "No spelling errors found"
