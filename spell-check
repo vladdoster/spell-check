@@ -251,22 +251,48 @@ generate_spell_report() {
     printf "\n" | tee -a "$report_file"
 
     # Extract and display word changes (- lines = before, + lines = after)
-    local line_num=0
     local changes_in_file=0
+    local before_line=""
+    local after_line=""
 
-    # Parse diff output to show before/after
+    # Parse diff output to extract changed words only
     echo "$file_diff" | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+)' | while IFS= read -r line; do
       if [[ "$line" =~ ^- ]]; then
-        printf "  ${RED}BEFORE: %s${NC}\n" "${line:1}" | tee -a "$report_file"
-      elif [[ "$line" =~ ^+ ]]; then
-        printf "  ${GREEN}AFTER:  %s${NC}\n" "${line:1}" | tee -a "$report_file"
-        printf "\n" | tee -a "$report_file"
-        ((changes_in_file++))
+        before_line="${line:1}"
+      elif [[ "$line" =~ ^+ ]] && [[ -n "$before_line" ]]; then
+        after_line="${line:1}"
+
+        # Compare words and extract differences
+        local -a before_words after_words
+        before_words=(${(z)before_line})
+        after_words=(${(z)after_line})
+
+        # Find differing words by comparing position by position
+        local max_len=${#before_words}
+        (( ${#after_words} > max_len )) && max_len=${#after_words}
+
+        for ((i=1; i<=max_len; i++)); do
+          local before_word="${before_words[i]}"
+          local after_word="${after_words[i]}"
+
+          # If words differ, display them
+          if [[ "$before_word" != "$after_word" ]]; then
+            if [[ -n "$before_word" && -n "$after_word" ]]; then
+              printf "  ${RED}%s${NC} → ${GREEN}%s${NC}\n" "$before_word" "$after_word" | tee -a "$report_file"
+              ((changes_in_file++))
+            fi
+          fi
+        done
+
+        before_line=""
+        after_line=""
       fi
     done
 
-    total_changes=$((total_changes + changes_in_file))
-    printf "\n" | tee -a "$report_file"
+    if (( changes_in_file > 0 )); then
+      total_changes=$((total_changes + changes_in_file))
+      printf "\n" | tee -a "$report_file"
+    fi
   done
 
   printf "${GREEN}=== SUMMARY ===${NC}\n" | tee -a "$report_file"
