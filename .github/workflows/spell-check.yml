@@ -60,14 +60,16 @@ jobs:
           path: target-repo
 
       - name: Check spelling with codespell
+        continue-on-error: true
         working-directory: target-repo
         run: |
           ignore_words=$(echo -n ${{ github.event.inputs.ignore }} | tr ',' ' ' | xargs | tr ' ' ',')
           ignore_words_opt="${ignore_words:+--ignore-words-list }${ignore_words}"
-
+          
           skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
           skip_opt="${skip:+--skip }${skip}"
-          uvx codespell -i 0 -w ${ignore_words_opt}${skip_opt} $(find . -path '*/.*' -prune -o -type f -print)
+          
+          find . -path '*/.*' -prune -o -type f -print0 | xargs -0 codespell --summary --count -i 0 -q 11 -w 
 
       - name: Check for changes
         id: changes
