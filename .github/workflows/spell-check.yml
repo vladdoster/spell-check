@@ -68,8 +68,8 @@ jobs:
           
           skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
           skip_opt="${skip:+--skip }${skip}"
-          
-          find . -path '*/.*' -prune -o -type f -print0 | xargs -0 codespell --summary --count -i 0 -q 11 -w 
+
+          find . -path '*/.*' -prune -o -type f -print0 | xargs -0 uvx codespell --summary --count -i 0 -q 11 -w 
 
       - name: Check for changes
         id: changes
