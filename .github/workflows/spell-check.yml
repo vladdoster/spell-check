@@ -64,13 +64,19 @@ jobs:
         continue-on-error: true
         working-directory: target-repo
         run: |
-          ignore_words=$(echo -n ${1} | tr ',' ' ' | xargs | tr ' ' ',')
+          ignore_words=$(echo -n ${{ github.event.inputs.ignore }} | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v ignore_words_opt "%q" ${ignore_words:+--ignore-words-list }${ignore_words}
           
-          skip=$(echo -n ${2} | tr ',' ' ' | xargs | tr ' ' ',')
+          skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v skip_opt "%q" ${skip:+--skip }${skip}
-          
-          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") --summary --count -i 0 -q 11 -w <<< <(find . -path '*/.*' -prune -o -type f -print)
+          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") \
+            --count \
+            --interactive 0 \
+            --quiet-level 11 \
+            --stdin-single-line \
+            --summary \
+            --write-changes \
+          <<< <(find . -path '*/.*' -prune -o -type f -print)
 
       - name: Check for changes
         id: changes
