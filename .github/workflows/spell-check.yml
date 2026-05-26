@@ -89,8 +89,12 @@ jobs:
       - name: Setup git credentials
         if: steps.changes.outputs.found_issues == 'true'
         run: |
-          gh auth status --active --hostname 'github.com'
-          gh auth switch --hostname 'github.com' --user 'vladdoster'
+          echo ${{ secrets.GH_PAT }} | gh auth login --with-token
+          # Switch the active account on a specific host to a specific user
+          gh auth switch --hostname 'github.com' --user vladdoster
+          gh auth setup-git --force --hostname 'github.com'
+          gh auth status --active
+          # gh auth switch --hostname 'github.com' --user 'vladdoster'
           echo $GH_CONFIG_DIR # likely returns blank
           gh auth status --active --hostname 'github.com'
           git config --global user.name "${{ github.repository_owner }}"
