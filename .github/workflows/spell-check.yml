@@ -57,6 +57,7 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
           repository: ${{ steps.repo.outputs.repo }}
+          persist-credentials: true
           path: target-repo
 
       - name: Check spelling with codespell
@@ -88,6 +89,10 @@ jobs:
       - name: Setup git credentials
         if: steps.changes.outputs.found_issues == 'true'
         run: |
+          gh auth status
+          gh auth  switch --user 'vladdoster'
+          echo $GH_CONFIG_DIR # likely returns blank
+          gh auth status # will show you logged in to account 1
           git config --global user.name "${{ github.repository_owner }}"
           git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
@@ -96,7 +101,7 @@ jobs:
         if: steps.changes.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false
+          gh repo fork ${{ steps.repo.outputs.repo }} --clone=false --default-branch-only
           git remote set-url origin "https://github.com/${{ github.repository_owner }}/${{ steps.repo.outputs.repoName }}.git"
 
       - name: Commit and push changes
@@ -104,11 +109,12 @@ jobs:
         if: steps.changes.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
-          git switch --force-create docs/fix-spelling
+          BRANCH='docs/fix-spelling'
+          git switch --force-create "${BRANCH}"
           git add -A
-          git commit -m "docs: correct spelling" --signoff
-          git push origin docs/fix-spelling
-          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}" >> "${GITHUB_STEP_SUMMARY}"
+          git commit --message "docs: correct spelling" --signoff
+          git push origin "${BRANCH}"
+          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/compare/docs/${BRANCH}?expand=1" >> "${GITHUB_STEP_SUMMARY}"
 
   deleteFork:
     runs-on: ubuntu-latest
