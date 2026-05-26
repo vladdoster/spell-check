@@ -65,7 +65,7 @@ jobs:
         working-directory: target-repo
         run: |
           ignore_words=$(echo -n ${{ github.event.inputs.ignore }} | tr ',' ' ' | xargs | tr ' ' ',')
-          printf -v ignore_words_opt "%q" ${ignore_words:+--ignore-words-list }${ignore_words}
+          printf -v ignore_words_opt "%q" ${ignore_words:+--ignore-words }${ignore_words}
           
           skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v skip_opt "%q" ${skip:+--skip }${skip}
