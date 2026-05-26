@@ -17,8 +17,8 @@ on:
         type: string
 
 run-name: ${{ inputs.repository }}
-env:
-  GH_TOKEN: ${{ secrets.GH_PAT }}
+# env:
+#   GH_TOKEN: ${{ secrets.GH_PAT }}
 
 jobs:
   spellcheck:
