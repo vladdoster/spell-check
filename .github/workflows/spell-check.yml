@@ -8,30 +8,32 @@ on:
         required: true
         type: string
       ignore:
-        description: "Space seperated list of words to ignore"
-        required: false
-        type: string 
-      skip:
-        description: "comma-separated list of files to skip."
+        description: "Space-separated list of words to ignore"
         required: false
         type: string
-      delete_fork:
-        description: 'Whether to delete fork'
-        type: boolean
-        required: true
-        default: false
+      skip:
+        description: "Comma-separated list of files to skip"
+        required: false
+        type: string
+
+run-name: ${{ inputs.repository }}
+env:
+  GH_TOKEN: ${{ secrets.GH_PAT }}
+
 jobs:
   spellcheck:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      GH_TOKEN: ${{ secrets.GH_PAT }}
+    outputs:
+      repoFork: ${{ steps.repo.outputs.repoFork }}
+      repoForkUrl: ${{ steps.repo.outputs.repoForkUrl }}
+
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-        
-      - name: Clone repository
+
+      - name: Resolve repository metadata
         id: repo
         run: |
           echo "::group::clean input"
@@ -47,46 +49,30 @@ jobs:
           echo "repoFork=${repoFork}" >> "$GITHUB_OUTPUT"
           echo "repoForkUrl=${repoForkUrl}" >> "$GITHUB_OUTPUT"
           printf '### [%s](%s)\n' "${repo}" "${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
-          gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed} 
+          gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed}
           echo "::endgroup::"
-    
+
       - name: Checkout ${{ steps.repo.outputs.repo }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
-          token: ${{ secrets.GH_PAT }}  
+          token: ${{ secrets.GH_PAT }}
           repository: ${{ steps.repo.outputs.repo }}
           path: target-repo
 
       - name: Check spelling with codespell
+        continue-on-error: true
         working-directory: target-repo
         run: |
-          my_string="${{ github.event.inputs.ignore }}"
-          FILE=/tmp/ignore.txt
-          CONFIG=/tmp/codespell.cfg
-          touch ${CONFIG} "${FILE}" 
-          if [[ ! -z "$my_string" ]]; then
-            printf '%s\n' ${{ github.event.inputs.ignore }} > "$FILE"
-            if ! grep -q '[^[:space:]]' "$FILE"; then
-              echo "File '$FILE' is empty or contains only whitespace."
-            else
-              echo '- Ignored: `${{ github.event.inputs.ignore }}`' >> "${GITHUB_STEP_SUMMARY}"
-              echo "File '$FILE' contains readable content."
-            fi
-          fi
-          printf '[codespell]\nignore-words = %s\ninteractive = 2\n' "${FILE}" > "$CONFIG"
-          if [[ ! -z "${{ github.event.inputs.skip }}" ]]; then
-            printf 'skip = %s\n' "${{ github.event.inputs.skip }}" >> "$CONFIG"
-            echo '- Skipped: `${{ github.event.inputs.skip }}`' >> "${GITHUB_STEP_SUMMARY}"
-          fi
-          cat "$CONFIG"
-          find . \
-            -type f \
-            -regextype posix-egrep \
-            -regex ".*\.(mdx|md|txt)$" \
-            -exec sh -c 'yes " " | uvx codespell --config "/tmp/codespell.cfg" -w "$@"' sh {} +
+          ignore_words=$(echo -n ${{ github.event.inputs.ignore }} | tr ',' ' ' | xargs | tr ' ' ',')
+          ignore_words_opt="${ignore_words:+--ignore-words-list }${ignore_words}"
+          
+          skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
+          skip_opt="${skip:+--skip }${skip}"
 
-      - name: Run cspell on markdown files
-        id: cspell
+          find . -path '*/.*' -prune -o -type f -print0 | xargs -0 uvx codespell --summary --count -i 0 -q 11 -w 
+
+      - name: Check for changes
+        id: changes
         env:
           changes: false
         working-directory: target-repo
@@ -98,35 +84,44 @@ jobs:
           printf "found changed files to commit: %s" ${changes}
           echo "found_issues=${changes}" >> "$GITHUB_OUTPUT"
           echo "::endgroup::"
-          
-      - name: Setup credentials to access private repositories
-        if: steps.cspell.outputs.found_issues == 'true'
+
+      - name: Setup git credentials
+        if: steps.changes.outputs.found_issues == 'true'
         run: |
-          git config --global user.name "${{github.repository_owner}}"
+          git config --global user.name "${{ github.repository_owner }}"
           git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
 
       - name: Fork repository
-        if: steps.cspell.outputs.found_issues == 'true'
+        if: steps.changes.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
           gh repo fork "${{ steps.repo.outputs.repo }}" --clone=false
-          git remote set-url origin "https://github.com/${{github.repository_owner}}/${{ steps.repo.outputs.repoName }}.git"
+          git remote set-url origin "https://github.com/${{ github.repository_owner }}/${{ steps.repo.outputs.repoName }}.git"
 
       - name: Commit and push changes
-        continue-on-error: true  
-        if: steps.cspell.outputs.found_issues == 'true'
+        continue-on-error: true
+        if: steps.changes.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
           git switch --force-create docs/fix-spelling
           git add -A
           git commit -m "docs: correct spelling" --signoff
           git push origin docs/fix-spelling
-          printf "### [%s](%s)" ${{ steps.repo.outputs.repoFork }} ${{ steps.repo.outputs.repoForkUrl }} >> "${GITHUB_STEP_SUMMARY}"
+          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}" >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Delete fork
-        if: ${{ github.event.inputs.delete_fork == 'true' }}
+  deleteFork:
+    runs-on: ubuntu-latest
+    environment: production
+    needs: spellcheck
+    env:
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+    steps:
+      - name: Delete ${{ github.event.inputs.repository }} fork
+        env:
+          repoFork: ${{ needs.spellcheck.outputs.repoFork }}
+          repoForkUrl: ${{ needs.spellcheck.outputs.repoForkUrl }}
         run: |
-          printf 'deleting %s' "${{ steps.repo.outputs.repoFork }}" 
-          gh repo delete --yes "${{ steps.repo.outputs.repoFork }}"
-          printf '> [!IMPORTANT]\n> deleted [%s](%s)' "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}" > "${GITHUB_STEP_SUMMARY}"
+          gh repo delete --yes "${repoFork}"
+          printf '> [!IMPORTANT]\n> Deleted [%s](%s)' "${repoFork}" "${repoForkUrl}" > "${GITHUB_STEP_SUMMARY}"
+          echo "::notice ::Deleted fork"
