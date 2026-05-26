@@ -17,8 +17,8 @@ on:
         type: string
 
 run-name: ${{ inputs.repository }}
-# env:
-#   GH_TOKEN: ${{ secrets.GH_PAT }}
+env:
+  GH_TOKEN: ${{ secrets.GH_PAT }}
 
 jobs:
   spellcheck:
@@ -89,6 +89,7 @@ jobs:
       - name: Setup git credentials
         if: steps.changes.outputs.found_issues == 'true'
         run: |
+          GH_TOKEN=
           echo ${{ secrets.GH_PAT }} | gh auth login --with-token
           # Switch the active account on a specific host to a specific user
           gh auth switch --hostname 'github.com' --user vladdoster
