@@ -89,10 +89,10 @@ jobs:
       - name: Setup git credentials
         if: steps.changes.outputs.found_issues == 'true'
         run: |
-          gh auth status
-          gh auth  switch --user 'vladdoster'
+          gh auth status --active --hostname 'github.com'
+          gh auth switch --hostname 'github.com' --user 'vladdoster'
           echo $GH_CONFIG_DIR # likely returns blank
-          gh auth status # will show you logged in to account 1
+          gh auth status --active --hostname 'github.com'
           git config --global user.name "${{ github.repository_owner }}"
           git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
