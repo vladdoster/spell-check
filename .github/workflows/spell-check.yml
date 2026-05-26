@@ -70,7 +70,7 @@ jobs:
           skip=$(echo -n ${2} | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v skip_opt "%q" ${skip:+--skip }${skip}
           
-          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") --summary --count -i 0 -q 11 <<< <(find . -path '*/.*' -prune -o -type f -print)
+          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") --summary --count -i 0 -q 11 -w <<< <(find . -path '*/.*' -prune -o -type f -print)
 
       - name: Check for changes
         id: changes
