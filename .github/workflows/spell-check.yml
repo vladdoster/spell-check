@@ -124,7 +124,6 @@ jobs:
           git add -A
           git commit --message "docs: correct spelling" --signoff
           git push origin "${BRANCH}"
-           https://github.com/vladdoster/jellyfin.org/pull/new/docs/fix-spelling 
           printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoFork }}/pull/new/${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
 
   deleteFork:
