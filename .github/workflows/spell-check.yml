@@ -42,7 +42,7 @@ jobs:
           repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
           repoUrl="$(gh repo view --json url --jq '.url' ${trimmed})"
           repoFork="${{github.repository_owner}}/${repoName}"
-          repoForkUrl="https://github.com/${repoFork}.git"
+          repoForkUrl="https://github.com/${repoFork}"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
@@ -124,7 +124,8 @@ jobs:
           git add -A
           git commit --message "docs: correct spelling" --signoff
           git push origin "${BRANCH}"
-          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/compare/docs/${BRANCH}?expand=1" >> "${GITHUB_STEP_SUMMARY}"
+           https://github.com/vladdoster/jellyfin.org/pull/new/docs/fix-spelling 
+          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoFork }}/pull/new/${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
 
   deleteFork:
     runs-on: ubuntu-latest
