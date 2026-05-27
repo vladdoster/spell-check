@@ -66,7 +66,6 @@ jobs:
         run: |
           ignore_words=$(echo -n "${{ github.event.inputs.ignore }}" | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v ignore_words_opt "%q" "${ignore_words:+--ignore-words-list }${ignore_words}"
-
           skip=$(echo -n "${{ github.event.inputs.skip }}" | tr ',' ' ' | xargs | tr ' ' ',')
           printf -v skip_opt "%q" "${skip:+--skip }${skip}"
           printf '#### arguments\n %s' "- $skip_opt" "- $ignore_words_opt" >> "${GITHUB_STEP_SUMMARY}"
