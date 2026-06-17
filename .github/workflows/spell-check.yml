@@ -42,7 +42,7 @@ jobs:
           repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
           repoUrl="$(gh repo view --json url --jq '.url' ${trimmed})"
           repoFork="${{github.repository_owner}}/${repoName}"
-          repoForkUrl="https://github.com/${repoFork}.git"
+          repoForkUrl="https://github.com/${repoFork}"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
           echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
           echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
@@ -64,13 +64,19 @@ jobs:
         continue-on-error: true
         working-directory: target-repo
         run: |
-          ignore_words=$(echo -n ${{ github.event.inputs.ignore }} | tr ',' ' ' | xargs | tr ' ' ',')
-          ignore_words_opt="${ignore_words:+--ignore-words-list }${ignore_words}"
-          
-          skip=$(echo -n ${{ github.event.inputs.skip }} | tr ',' ' ' | xargs | tr ' ' ',')
-          skip_opt="${skip:+--skip }${skip}"
-
-          find . -path '*/.*' -prune -o -type f -print0 | xargs -0 uvx codespell --summary --count -i 0 -q 11 -w 
+          ignore_words=$(echo -n "${{ github.event.inputs.ignore }}" | tr ',' ' ' | xargs | tr ' ' ',')
+          printf -v ignore_words_opt "%q" "${ignore_words:+--ignore-words-list }${ignore_words}"
+          skip=$(echo -n "${{ github.event.inputs.skip }}" | tr ',' ' ' | xargs | tr ' ' ',')
+          printf -v skip_opt "%q" "${skip:+--skip }${skip}"
+          printf '#### arguments\n %s' "- $skip_opt" "- $ignore_words_opt" >> "${GITHUB_STEP_SUMMARY}"
+          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") \
+            --count \
+            --interactive 0 \
+            --quiet-level 11 \
+            --stdin-single-line \
+            --summary \
+            --write-changes \
+          <<< <(find . -path '*/.*' -prune -o -type f -print)
 
       - name: Check for changes
         id: changes
@@ -89,13 +95,23 @@ jobs:
       - name: Setup git credentials
         if: steps.changes.outputs.found_issues == 'true'
         run: |
-          gh auth status
-          gh auth  switch --user 'vladdoster'
+          echo "::group::Git info"
+          PAGER= git config --list --show-scope --show-origin
+          GH_TOKEN=
+          echo ${{ secrets.GH_PAT }} | gh auth login --with-token
+          # Switch the active account on a specific host to a specific user
+          gh auth switch --hostname 'github.com' --user vladdoster
+          gh auth setup-git --force --hostname 'github.com'
+          gh auth status --active
+          # gh auth switch --hostname 'github.com' --user 'vladdoster'
           echo $GH_CONFIG_DIR # likely returns blank
-          gh auth status # will show you logged in to account 1
+          gh auth status --active --hostname 'github.com'
           git config --global user.name "${{ github.repository_owner }}"
           git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
           git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
+          PAGER= git config --list --show-scope --show-origin
+          echo "::endgroup::"
+
 
       - name: Fork repository
         if: steps.changes.outputs.found_issues == 'true'
@@ -114,11 +130,12 @@ jobs:
           git add -A
           git commit --message "docs: correct spelling" --signoff
           git push origin "${BRANCH}"
-          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/compare/docs/${BRANCH}?expand=1" >> "${GITHUB_STEP_SUMMARY}"
+          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/pull/new/${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
 
   deleteFork:
+    name: 'Cleanup'
     runs-on: ubuntu-latest
-    environment: production
+    environment: 'Delete fork'
     needs: spellcheck
     env:
       GH_TOKEN: ${{ secrets.GH_PAT }}
