@@ -118,7 +118,7 @@ jobs:
 
   deleteFork:
     runs-on: ubuntu-latest
-    environment: production
+    environment: 'Delete fork'
     needs: spellcheck
     env:
       GH_TOKEN: ${{ secrets.GH_PAT }}
