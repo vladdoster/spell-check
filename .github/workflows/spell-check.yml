@@ -133,8 +133,9 @@ jobs:
           printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/pull/new/${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
 
   deleteFork:
+    name: 'Cleanup'
     runs-on: ubuntu-latest
-    environment: production
+    environment: 'Delete fork'
     needs: spellcheck
     env:
       GH_TOKEN: ${{ secrets.GH_PAT }}
