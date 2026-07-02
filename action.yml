@@ -1,0 +1,39 @@
+name: 'Codespell Fixer'
+description: 'Codespell a target repository and push spelling fixes to a fork.'
+branding:
+  icon: 'check-circle'
+  color: 'green'
+inputs:
+  repository:
+    description: 'Repository slug (user/repo) to spell-check.'
+    required: true
+  ignore:
+    description: 'Space-separated list of words to ignore.'
+    required: false
+    default: ''
+  skip:
+    description: 'Comma-separated list of files/globs to skip.'
+    required: false
+    default: ''
+  github-token:
+    description: 'Token (PAT) with permission to fork, push, and delete the fork.'
+    required: true
+  delete-fork:
+    description: 'When "true", delete the fork named by `repository` and exit.'
+    required: false
+    default: 'false'
+outputs:
+  repoFork:
+    description: 'owner/name of the fork.'
+  repoForkUrl:
+    description: 'URL of the fork.'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.repository }}
+    - ${{ inputs.ignore }}
+    - ${{ inputs.skip }}
+  env:
+    GH_TOKEN: ${{ inputs.github-token }}
+    INPUT_DELETE_FORK: ${{ inputs.delete-fork }}
