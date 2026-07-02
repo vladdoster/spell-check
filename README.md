@@ -1,4 +1,4 @@
-# spell
+# speller
 
 [![Spell Check](https://github.com/vladdoster/spell-/actions/workflows/spell-check.yml/badge.svg)](https://github.com/vladdoster/spell-/actions/workflows/spell-check.yml)
 
@@ -13,6 +13,30 @@ A standalone CLI tool for spell checking repositories using codespell.
 - 🎨 Color-coded output for better user experience
 - ✅ Uses zparseopts for robust argument parsing
 
+## GitHub Action
+
+CI runs the spell-fix pipeline as a **Docker container action** (`action.yml` + `Dockerfile` +
+`entrypoint.sh`). Trigger it via **workflow_dispatch** on the
+[Spell Check workflow](.github/workflows/spell-check.yml): it codespells the target repository,
+and when it finds fixes it forks the repo and pushes them to a `docs/fix-spelling` branch for you
+to open a pull request. A second, approval-gated `Delete fork` job cleans up the fork.
+
+### Action inputs
+
+| Input          | Required | Description                                         |
+| -------------- | -------- | --------------------------------------------------- |
+| `repository`   | yes      | Repository slug (`user/repo`) to spell-check.       |
+| `ignore`       | no       | Space-separated words to ignore.                    |
+| `skip`         | no       | Comma-separated files/globs to skip.                |
+| `github-token` | yes      | PAT with fork/push/delete permissions.              |
+| `delete-fork`  | no       | When `true`, delete the fork named by `repository`. |
+
+The workflow supplies the token from the `GH_PAT` repository secret.
+
+## Standalone CLI
+
+The `spell-check` zsh script provides the same pipeline for local use.
+
 ## Requirements
 
 - `zsh` - Z shell
@@ -24,6 +48,7 @@ A standalone CLI tool for spell checking repositories using codespell.
 ## Installation
 
 1. Download the script:
+
    ```bash
    curl -O https://raw.githubusercontent.com/vladdoster/spell-/main/spell-check
    chmod +x spell-check
@@ -51,16 +76,19 @@ spell-check [OPTIONS]
 ### Examples
 
 Basic spell check:
+
 ```bash
 spell-check -r owner/repo
 ```
 
 Ignore specific words:
+
 ```bash
 spell-check -r owner/repo -i "myword anotherword"
 ```
 
 Skip specific files and delete fork after:
+
 ```bash
 spell-check -r owner/repo -s "*.log,*.tmp" -d
 ```

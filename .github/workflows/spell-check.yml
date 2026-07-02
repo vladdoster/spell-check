@@ -17,134 +17,38 @@ on:
         type: string
 
 run-name: ${{ inputs.repository }}
-env:
-  GH_TOKEN: ${{ secrets.GH_PAT }}
 
 jobs:
   spellcheck:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     outputs:
-      repoFork: ${{ steps.repo.outputs.repoFork }}
-      repoForkUrl: ${{ steps.repo.outputs.repoForkUrl }}
-
+      repoFork: ${{ steps.spell.outputs.repoFork }}
+      repoForkUrl: ${{ steps.spell.outputs.repoForkUrl }}
     steps:
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Resolve repository metadata
-        id: repo
-        run: |
-          echo "::group::clean input"
-          trimmed=$(echo "${{ github.event.inputs.repository }}" | sed 's:/*$::')
-          repo="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' ${trimmed})"
-          repoName="$(gh repo view --json name --jq '.name' ${trimmed})"
-          repoUrl="$(gh repo view --json url --jq '.url' ${trimmed})"
-          repoFork="${{github.repository_owner}}/${repoName}"
-          repoForkUrl="https://github.com/${repoFork}"
-          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
-          echo "repoName=${repoName}" >> "$GITHUB_OUTPUT"
-          echo "repoUrl=${repoUrl}" >> "$GITHUB_OUTPUT"
-          echo "repoFork=${repoFork}" >> "$GITHUB_OUTPUT"
-          echo "repoForkUrl=${repoForkUrl}" >> "$GITHUB_OUTPUT"
-          printf '### [%s](%s)\n' "${repo}" "${repoUrl}" >> "${GITHUB_STEP_SUMMARY}"
-          gh repo view  --json nameWithOwner --jq '.nameWithOwner' ${trimmed}
-          echo "::endgroup::"
-
-      - name: Checkout ${{ steps.repo.outputs.repo }}
+      - name: Checkout action
         uses: actions/checkout@v5
+
+      - name: Run codespell fixer
+        id: spell
+        uses: ./
         with:
-          token: ${{ secrets.GH_PAT }}
-          repository: ${{ steps.repo.outputs.repo }}
-          persist-credentials: true
-          path: target-repo
-
-      - name: Check spelling with codespell
-        continue-on-error: true
-        working-directory: target-repo
-        run: |
-          ignore_words=$(echo -n "${{ github.event.inputs.ignore }}" | tr ',' ' ' | xargs | tr ' ' ',')
-          printf -v ignore_words_opt "%q" "${ignore_words:+--ignore-words-list }${ignore_words}"
-          skip=$(echo -n "${{ github.event.inputs.skip }}" | tr ',' ' ' | xargs | tr ' ' ',')
-          printf -v skip_opt "%q" "${skip:+--skip }${skip}"
-          printf '#### arguments\n %s' "- $skip_opt" "- $ignore_words_opt" >> "${GITHUB_STEP_SUMMARY}"
-          uvx codespell $(sh -c "echo $skip_opt $ignore_words_opt") \
-            --count \
-            --interactive 0 \
-            --quiet-level 11 \
-            --stdin-single-line \
-            --summary \
-            --write-changes \
-          <<< <(find . -path '*/.*' -prune -o -type f -print)
-
-      - name: Check for changes
-        id: changes
-        env:
-          changes: false
-        working-directory: target-repo
-        run: |
-          echo "::group::Check for changes"
-          if ! git diff --exit-code --quiet; then
-            changes=true
-          fi
-          printf "found changed files to commit: %s" ${changes}
-          echo "found_issues=${changes}" >> "$GITHUB_OUTPUT"
-          echo "::endgroup::"
-
-      - name: Setup git credentials
-        if: steps.changes.outputs.found_issues == 'true'
-        run: |
-          echo "::group::Git info"
-          PAGER= git config --list --show-scope --show-origin
-          GH_TOKEN=
-          echo ${{ secrets.GH_PAT }} | gh auth login --with-token
-          # Switch the active account on a specific host to a specific user
-          gh auth switch --hostname 'github.com' --user vladdoster
-          gh auth setup-git --force --hostname 'github.com'
-          gh auth status --active
-          # gh auth switch --hostname 'github.com' --user 'vladdoster'
-          echo $GH_CONFIG_DIR # likely returns blank
-          gh auth status --active --hostname 'github.com'
-          git config --global user.name "${{ github.repository_owner }}"
-          git config --global user.email "$(gh api user/public_emails -q '.[0].email')"
-          git config --global url.https://${{ secrets.GH_PAT }}@github.com/.insteadOf https://github.com/
-          PAGER= git config --list --show-scope --show-origin
-          echo "::endgroup::"
-
-
-      - name: Fork repository
-        if: steps.changes.outputs.found_issues == 'true'
-        working-directory: target-repo
-        run: |
-          gh repo fork ${{ steps.repo.outputs.repo }} --clone=false --default-branch-only
-          git remote set-url origin "https://github.com/${{ github.repository_owner }}/${{ steps.repo.outputs.repoName }}.git"
-
-      - name: Commit and push changes
-        continue-on-error: true
-        if: steps.changes.outputs.found_issues == 'true'
-        working-directory: target-repo
-        run: |
-          BRANCH='docs/fix-spelling'
-          git switch --force-create "${BRANCH}"
-          git add -A
-          git commit --message "docs: correct spelling" --signoff
-          git push origin "${BRANCH}"
-          printf "### [%s](%s)" "${{ steps.repo.outputs.repoFork }}" "${{ steps.repo.outputs.repoForkUrl }}/pull/new/${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+          repository: ${{ inputs.repository }}
+          ignore: ${{ inputs.ignore }}
+          skip: ${{ inputs.skip }}
+          github-token: ${{ secrets.GH_PAT }}
 
   deleteFork:
-    name: 'Cleanup'
+    name: Cleanup
     runs-on: ubuntu-latest
-    environment: 'Delete fork'
+    environment: Delete fork
     needs: spellcheck
-    env:
-      GH_TOKEN: ${{ secrets.GH_PAT }}
     steps:
-      - name: Delete ${{ github.event.inputs.repository }} fork
-        env:
-          repoFork: ${{ needs.spellcheck.outputs.repoFork }}
-          repoForkUrl: ${{ needs.spellcheck.outputs.repoForkUrl }}
-        run: |
-          gh repo delete --yes "${repoFork}"
-          printf '> [!IMPORTANT]\n> Deleted [%s](%s)' "${repoFork}" "${repoForkUrl}" > "${GITHUB_STEP_SUMMARY}"
-          echo "::notice ::Deleted fork"
+      - name: Checkout action
+        uses: actions/checkout@v5
+
+      - name: Delete ${{ needs.spellcheck.outputs.repoFork }} fork
+        uses: ./
+        with:
+          repository: ${{ needs.spellcheck.outputs.repoFork }}
+          delete-fork: "true"
+          github-token: ${{ secrets.GH_PAT }}
