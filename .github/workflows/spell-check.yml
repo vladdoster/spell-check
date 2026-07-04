@@ -28,6 +28,7 @@ jobs:
     outputs:
       repoFork: ${{ steps.repo.outputs.repoFork }}
       repoForkUrl: ${{ steps.repo.outputs.repoForkUrl }}
+      forkExists: ${{ steps.fork.outputs.forkExists }}
 
     steps:
       - name: Install uv
@@ -112,12 +113,13 @@ jobs:
           PAGER= git config --list --show-scope --show-origin
           echo "::endgroup::"
 
-
       - name: Fork repository
+        id: fork
         if: steps.changes.outputs.found_issues == 'true'
         working-directory: target-repo
         run: |
           gh repo fork ${{ steps.repo.outputs.repo }} --clone=false --default-branch-only
+          echo "forkExists=${?}" >> "$GITHUB_OUTPUT"
           git remote set-url origin "https://github.com/${{ github.repository_owner }}/${{ steps.repo.outputs.repoName }}.git"
 
       - name: Commit and push changes
@@ -137,6 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: 'Delete fork'
     needs: spellcheck
+    if: needs.spellcheck.outputs.forkExists == '0'
     env:
       GH_TOKEN: ${{ secrets.GH_PAT }}
     steps:
