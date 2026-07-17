@@ -18,7 +18,7 @@ RUN set -eux; \
 # codespell (pinned for reproducibility; replaces the former `uvx codespell`).
 RUN pip install --no-cache-dir codespell==2.4.2
 
-COPY entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh codespell-problem-matcher.json /
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
