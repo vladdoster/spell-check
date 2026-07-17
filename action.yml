@@ -1,35 +1,35 @@
-name: 'Codespell Fixer'
-description: 'Codespell a target repository and push spelling fixes to a fork.'
+name: "Codespell Fixer"
+description: "Codespell a target repository and push spelling fixes to a fork."
 branding:
-  icon: 'check-circle'
-  color: 'green'
+  icon: "check-circle"
+  color: "green"
 inputs:
   repository:
-    description: 'Repository slug (user/repo) to spell-check.'
+    description: "Repository slug (user/repo) to spell-check."
     required: true
   ignore:
-    description: 'Space-separated list of words to ignore.'
+    description: "Space-separated list of words to ignore."
     required: false
-    default: ''
+    default: ""
   skip:
-    description: 'Comma-separated list of files/globs to skip.'
+    description: "Comma-separated list of files/globs to skip."
     required: false
-    default: ''
+    default: ""
   github-token:
-    description: 'Token (PAT) with permission to fork, push, and delete the fork.'
+    description: "Token (PAT) with permission to fork, push, and delete the fork."
     required: true
   delete-fork:
     description: 'When "true", delete the fork named by `repository` and exit.'
     required: false
-    default: 'false'
+    default: "false"
 outputs:
   repoFork:
-    description: 'owner/name of the fork.'
+    description: "owner/name of the fork."
   repoForkUrl:
-    description: 'URL of the fork.'
+    description: "URL of the fork."
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: "docker"
+  image: "Dockerfile"
   args:
     - ${{ inputs.repository }}
     - ${{ inputs.ignore }}
