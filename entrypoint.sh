@@ -3,16 +3,11 @@
 # POSIX sh. Preserves the behavior of the former inline spell-check workflow.
 set -eux
 
-# With problem matchers in a container, the matcher config MUST be available outside the container on the VM
-# So we will just copy it into the workspace
-
-matcher_path="$(pwd)"/codespell-problem-matcher.json
-cp /codespell-problem-matcher.json "$matcher_path"
-
-# Note here that we do not use the matcher-path since this is a bind mount into the container
-# and is not the same path outside the container on the VM.  Instead, just use current dir
+# Problem matchers run on the VM, outside this container, so the matcher config must
+# live in the bind-mounted workspace. Copy it there and register it by its relative
+# path — the container's absolute path is not the same as the VM's.
+cp /codespell-problem-matcher.json .
 echo "::add-matcher::codespell-problem-matcher.json"
-# echo "::add-matcher::${RUNNER_TEMP}/_github_workflow/codespell-matcher.json"
 
 # --- inputs -----------------------------------------------------------------
 repository="${1:-${INPUT_REPOSITORY:-}}"
