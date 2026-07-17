@@ -1,7 +1,7 @@
 #!/bin/sh
 # entrypoint.sh — Docker container action: codespell a target repo and push fixes to a fork.
 # POSIX sh. Preserves the behavior of the former inline spell-check workflow.
-set -eu
+set -eux
 
 # With problem matchers in a container, the matcher config MUST be available outside the container on the VM
 # So we will just copy it into the workspace
