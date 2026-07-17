@@ -3,6 +3,17 @@
 # POSIX sh. Preserves the behavior of the former inline spell-check workflow.
 set -eu
 
+# With problem matchers in a container, the matcher config MUST be available outside the container on the VM
+# So we will just copy it into the workspace
+
+matcher_path="$(pwd)"/codespell-problem-matcher.json
+cp /codespell-problem-matcher.json "$matcher_path"
+
+# Note here that we do not use the matcher-path since this is a bind mount into the container
+# and is not the same path outside the container on the VM.  Instead, just use current dir
+echo "::add-matcher::codespell-problem-matcher.json"
+# echo "::add-matcher::${RUNNER_TEMP}/_github_workflow/codespell-matcher.json"
+
 # --- inputs -----------------------------------------------------------------
 repository="${1:-${INPUT_REPOSITORY:-}}"
 ignore="${2:-${INPUT_IGNORE:-}}"
@@ -105,6 +116,10 @@ step_summary "#### arguments\n- skip: ${skip_list:-<none>}\n- ignore: ${ignore_w
 # codespell exits non-zero when it finds/writes fixes; don't abort (was continue-on-error).
 # Release/legal docs are excluded — they quote historical text verbatim.
 list_spell_targets | xargs -0 -r codespell "$@" || true
+
+# Remove the matchers, so no other jobs hit them.
+echo "::remove-matcher owner=codespell-matcher-default::"
+echo "::remove-matcher owner=codespell-matcher-specified::"
 
 # --- detect changes ---------------------------------------------------------
 if git diff --exit-code --quiet; then
