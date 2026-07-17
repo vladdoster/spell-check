@@ -30,7 +30,8 @@ set_output() {
 
 # Release/legal docs, matched case-insensitively: names come bare, .txt, or .md;
 # dirs match all files inside them. Shared by find_release_docs/list_spell_targets.
-release_doc_names='changelog license licence copying history news'
+# release_doc_names='changelog license licence copying history news'
+release_doc_names='news'
 release_doc_dirs='changelog .changeset changeset changesets release*'
 
 # List release/legal docs under $1 (default .).
