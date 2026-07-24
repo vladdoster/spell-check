@@ -5,9 +5,12 @@ set -eux
 
 # Problem matchers run on the VM, outside this container, so the matcher config must
 # live in the bind-mounted workspace. Copy it there and register it by its relative
-# path — the container's absolute path is not the same as the VM's.
-cp /codespell-problem-matcher.json .
-echo "::add-matcher::codespell-problem-matcher.json"
+# path — the container's absolute path is not the same as the VM's. Outside Actions
+# (local `docker run`) there is no workspace and matchers do nothing, so skip it.
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  cp /codespell-problem-matcher.json "${GITHUB_WORKSPACE}/"
+  echo "::add-matcher::codespell-problem-matcher.json"
+fi
 
 # --- inputs -----------------------------------------------------------------
 repository="${1:-${INPUT_REPOSITORY:-}}"
@@ -22,6 +25,9 @@ step_summary() {
 set_output() {
   [ -n "${GITHUB_OUTPUT:-}" ] && printf '%s=%s\n' "$1" "$2" >>"${GITHUB_OUTPUT}" || true
 }
+
+# GitHub logins and repo names are case-insensitive; normalize before comparing slugs.
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # Release/legal docs, matched case-insensitively: names come bare, .txt, or .md;
 # dirs match all files inside them. Shared by find_release_docs/list_spell_targets.
@@ -63,13 +69,24 @@ list_spell_targets() {
 
 # --- delete mode (used by the approval-gated cleanup job) -------------------
 if [ "${INPUT_DELETE_FORK:-false}" = "true" ]; then
-  echo "Deleting fork: ${repository}"
-  if gh repo delete --yes "${repository}"; then
-    step_summary "> [!IMPORTANT]\n> Deleted [${repository}](https://github.com/${repository})"
-    echo "::notice ::Deleted fork ${repository}"
-  else
+  [ -n "${repository}" ] || {
+    echo "::error ::repository input is required"
+    exit 1
+  }
+  # Never delete on an unverified slug: it must exist and actually be a fork.
+  is_fork="$(gh repo view --json isFork --jq '.isFork' "${repository}" 2>/dev/null || echo missing)"
+  if [ "${is_fork}" = missing ]; then
     echo "::notice ::Fork ${repository} not found (nothing to delete)"
+    exit 0
   fi
+  [ "${is_fork}" = true ] || {
+    echo "::error ::${repository} is not a fork; refusing to delete."
+    exit 1
+  }
+  echo "Deleting fork: ${repository}"
+  gh repo delete --yes "${repository}"
+  step_summary "> [!IMPORTANT]\n> Deleted [${repository}](https://github.com/${repository})"
+  echo "::notice ::Deleted fork ${repository}"
   exit 0
 fi
 
@@ -86,6 +103,14 @@ repoUrl="$(gh repo view --json url --jq '.url' "${trimmed}")"
 owner="${GITHUB_REPOSITORY_OWNER:-$(gh api user --jq '.login')}"
 repoFork="${owner}/${repoName}"
 repoForkUrl="https://github.com/${repoFork}"
+
+# A repo cannot be forked into the account that already owns it — ${repoFork} would resolve
+# to the target itself. Bail before cloning or spell-checking; pushing to the target is
+# never correct.
+if [ "$(lower "${owner}")" = "$(lower "${repo%%/*}")" ]; then
+  echo "::error ::${repo} is owned by ${owner}; a fork cannot be created. Run this action as a different account."
+  exit 1
+fi
 
 # Emit outputs early so the cleanup job has them even when nothing changes.
 set_output repoFork "${repoFork}"
@@ -114,8 +139,10 @@ step_summary "#### arguments\n- skip: ${skip_list:-<none>}\n- ignore: ${ignore_w
 list_spell_targets | xargs -0 -r codespell "$@" || true
 
 # Remove the matchers, so no other jobs hit them.
-echo "::remove-matcher owner=codespell-matcher-default::"
-echo "::remove-matcher owner=codespell-matcher-specified::"
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  echo "::remove-matcher owner=codespell-matcher-default::"
+  echo "::remove-matcher owner=codespell-matcher-specified::"
+fi
 
 # --- detect changes ---------------------------------------------------------
 if git diff --exit-code --quiet; then
@@ -130,7 +157,28 @@ git config user.email "$(gh api user/public_emails --jq '.[0].email' 2>/dev/null
 gh auth setup-git
 
 # --- fork, commit, push -----------------------------------------------------
-gh repo fork "${repo}" --clone=false --default-branch-only || echo "Fork may already exist"
+# `gh repo fork` exits 0 when the fork already exists and non-zero for reasons that are not
+# fatal, so its status is advisory only. The identity check below is the real gate: the slug
+# must exist, be a fork, and name the target as its parent — otherwise a same-named unrelated
+# repo (or the target itself) would take the force push. Forks are eventually consistent, so
+# poll briefly. Note `gh`'s parent object exposes owner.login/name — there is no
+# nameWithOwner field on it, so the slug is composed by hand.
+gh repo fork "${repo}" --clone=false --default-branch-only \
+  || echo "fork command returned non-zero; verifying fork state"
+
+parent=''
+n=0
+while [ "${n}" -lt 5 ]; do
+  parent="$(gh repo view --json isFork,parent --jq 'select(.isFork) | "\(.parent.owner.login)/\(.parent.name)"' "${repoFork}" 2>/dev/null || true)"
+  [ "$(lower "${parent}")" = "$(lower "${repo}")" ] && break
+  n=$((n + 1))
+  [ "${n}" -lt 5 ] && sleep 3
+done
+[ "$(lower "${parent}")" = "$(lower "${repo}")" ] || {
+  echo "::error ::${repoFork} is not a fork of ${repo} (parent: ${parent:-none}); refusing to push."
+  exit 1
+}
+
 git remote set-url origin "${repoForkUrl}.git"
 
 branch='docs/fix-spelling'
