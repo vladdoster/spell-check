@@ -5,9 +5,12 @@ set -eux
 
 # Problem matchers run on the VM, outside this container, so the matcher config must
 # live in the bind-mounted workspace. Copy it there and register it by its relative
-# path — the container's absolute path is not the same as the VM's.
-cp /codespell-problem-matcher.json .
-echo "::add-matcher::codespell-problem-matcher.json"
+# path — the container's absolute path is not the same as the VM's. Outside Actions
+# (local `docker run`) there is no workspace and matchers do nothing, so skip it.
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  cp /codespell-problem-matcher.json "${GITHUB_WORKSPACE}/"
+  echo "::add-matcher::codespell-problem-matcher.json"
+fi
 
 # --- inputs -----------------------------------------------------------------
 repository="${1:-${INPUT_REPOSITORY:-}}"
@@ -114,8 +117,10 @@ step_summary "#### arguments\n- skip: ${skip_list:-<none>}\n- ignore: ${ignore_w
 list_spell_targets | xargs -0 -r codespell "$@" || true
 
 # Remove the matchers, so no other jobs hit them.
-echo "::remove-matcher owner=codespell-matcher-default::"
-echo "::remove-matcher owner=codespell-matcher-specified::"
+if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+  echo "::remove-matcher owner=codespell-matcher-default::"
+  echo "::remove-matcher owner=codespell-matcher-specified::"
+fi
 
 # --- detect changes ---------------------------------------------------------
 if git diff --exit-code --quiet; then
