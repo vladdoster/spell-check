@@ -106,7 +106,7 @@ parse_args() {
 check_requirements() {
   local -a missing_commands=()
 
-  for cmd in gh uv git; do
+  for cmd in gh jq uv git; do
     if ! command -v "$cmd" &>/dev/null; then
       missing_commands+=("$cmd")
     fi
@@ -138,8 +138,16 @@ get_repo_info() {
   typeset -g repo_name=$(echo "$repo_json" | jq -r '.nameWithOwner')
   typeset -g repo_short_name=$(echo "$repo_json" | jq -r '.name')
   typeset -g repo_url=$(echo "$repo_json" | jq -r '.url')
-  typeset -g repo_fork="${GITHUB_REPOSITORY_OWNER:-$(gh api user -q '.login')}/${repo_short_name}"
+  typeset -g fork_owner="${GITHUB_REPOSITORY_OWNER:-$(gh api user -q '.login')}"
+  typeset -g repo_fork="${fork_owner}/${repo_short_name}"
   typeset -g repo_fork_url="https://github.com/${repo_fork}.git"
+
+  # A repo cannot be forked into the account that already owns it — repo_fork would resolve
+  # to the target itself, and pushing to the target is never correct. Bail before cloning.
+  # Logins are case-insensitive, so compare lowercased.
+  if [[ "${(L)fork_owner}" == "${(L)repo_name%%/*}" ]]; then
+    error "$repo_name is owned by $fork_owner; a fork cannot be created. Run as a different account."
+  fi
 
   info "Repository: $repo_name"
   info "URL: $repo_url"
@@ -334,9 +342,26 @@ setup_git_credentials() {
 fork_repository() {
   info "Forking repository..."
 
+  # `gh repo fork` exits 0 when the fork already exists and non-zero for reasons that are not
+  # fatal, so its status is advisory only. The identity check below is the real gate: the slug
+  # must exist, be a fork, and name the target as its parent — otherwise a same-named unrelated
+  # repo would take the push. Forks are eventually consistent, so poll briefly. Note `gh`'s
+  # parent object exposes owner.login/name — there is no nameWithOwner field on it, so the
+  # slug is composed by hand.
   gh repo fork "$repo_name" --clone=false || {
-    warn "Fork may already exist or failed to create"
+    warn "Fork command returned non-zero; verifying fork state"
   }
+
+  local parent=""
+  for i in {1..5}; do
+    parent=$(gh repo view --json isFork,parent -q 'select(.isFork) | "\(.parent.owner.login)/\(.parent.name)"' "$repo_fork" 2>/dev/null) || parent=""
+    [[ "${(L)parent}" == "${(L)repo_name}" ]] && break
+    (( i < 5 )) && sleep 3
+  done
+
+  if [[ "${(L)parent}" != "${(L)repo_name}" ]]; then
+    error "$repo_fork is not a fork of $repo_name (parent: ${parent:-none}); refusing to push."
+  fi
 
   git remote set-url origin "https://github.com/${repo_fork}.git"
 }
@@ -357,6 +382,17 @@ commit_and_push() {
 # Delete the fork
 delete_fork_repo() {
   info "Deleting fork: $repo_fork"
+
+  # Never delete on an unverified slug: it must exist and actually be a fork.
+  local is_fork
+  is_fork=$(gh repo view --json isFork -q '.isFork' "$repo_fork" 2>/dev/null) || {
+    warn "Fork $repo_fork not found (nothing to delete)"
+    return 0
+  }
+
+  if [[ "$is_fork" != "true" ]]; then
+    error "$repo_fork is not a fork; refusing to delete."
+  fi
 
   gh repo delete --yes "$repo_fork" || {
     warn "Failed to delete fork: $repo_fork"
