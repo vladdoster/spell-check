@@ -31,8 +31,9 @@ lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # Release/legal docs, matched case-insensitively: names come bare, .txt, or .md;
 # dirs match all files inside them. Shared by find_release_docs/list_spell_targets.
-# release_doc_names='changelog license licence copying history news'
-release_doc_names='news'
+# changelog* is a find pattern (loops run under set -f), so CHANGELOG_OLD.md and
+# friends match too — at the cost of also skipping e.g. a changelog_parser.py.
+release_doc_names='changelog* license licence copying history news'
 release_doc_dirs='changelog .changeset changeset changesets release*'
 
 # List release/legal docs under $1 (default .).
