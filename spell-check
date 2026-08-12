@@ -14,7 +14,7 @@
 #   - GH_TOKEN falls back to `gh auth token` (keyring auth leaves the env unset)
 
 set -e
-setopt ERR_EXIT PIPE_FAIL
+setopt ERR_EXIT PIPE_FAIL EXTENDED_GLOB
 
 # $0 inside a zsh function is the function name (FUNCTION_ARGZERO), so usage()
 # would print "usage" — capture the script name while $0 is still the script.
@@ -26,6 +26,7 @@ typeset -g ignore_words=""
 typeset -g skip_files=""
 typeset -g delete_fork=0
 typeset -g dry_run=0
+typeset -g include_release_docs=0
 typeset -g help=0
 
 # Color output
@@ -47,6 +48,9 @@ OPTIONS:
   -s, --skip FILES         Comma-separated list of files to skip
   -d, --delete-fork        Delete fork after completion
   -n, --dry-run            Stop after the report; never fork, push, or delete
+  --include-release-docs   Also check release/legal docs (CHANGELOG*, LICENSE,
+                           COPYING, HISTORY, NEWS, changelog/changeset/release
+                           dirs), which are skipped by default
   -h, --help               Show this help message
 
 EXAMPLES:
@@ -88,6 +92,7 @@ parse_args() {
     s:=opt_skip -skip:=opt_skip \
     d=opt_delete_fork -delete-fork=opt_delete_fork \
     n=opt_dry_run -dry-run=opt_dry_run \
+    -include-release-docs=opt_include_release_docs \
     h=opt_help -help=opt_help \
     || {
       error "Invalid options. Use -h or --help for usage information."
@@ -116,6 +121,10 @@ parse_args() {
 
   if ((${#opt_dry_run})); then
     dry_run=1
+  fi
+
+  if ((${#opt_include_release_docs})); then
+    include_release_docs=1
   fi
 
   # Validate required arguments
@@ -240,6 +249,22 @@ run_spell_check() {
   # so its status is not a failure.
   local -a spell_targets
   spell_targets=(**/*.(md|mdx|txt)(.N))
+
+  # Release/legal docs quote historical or canonical text verbatim; never "fix"
+  # them. changelog matches as a prefix (CHANGELOG_OLD.md), the other names as
+  # exact stems only (newsletter.md and licensing-guide.md must stay checked).
+  # `.changeset` dirs are already invisible here: `**` skips dotdirs sans GLOB_DOTS.
+  if ((include_release_docs == 0)); then
+    local before_count=${#spell_targets}
+    spell_targets=(${spell_targets:#(#i)(*/)#changelog*})
+    spell_targets=(${spell_targets:#(#i)(*/)#(license|licence|copying|history|news).(md|mdx|txt)})
+    spell_targets=(${spell_targets:#(#i)(*/)#(changelog|changeset|changesets|release*)/*})
+    local excluded_count=$((before_count - ${#spell_targets}))
+    if ((excluded_count > 0)); then
+      info "Excluding ${excluded_count} release-doc file(s) (--include-release-docs to check them)"
+    fi
+  fi
+
   if ((${#spell_targets} == 0)); then
     warn "No markdown or text files found to check"
     return 0
