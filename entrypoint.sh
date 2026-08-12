@@ -120,7 +120,7 @@ echo "Target: ${repo} (${repoUrl})"
 
 # --- clone the target -------------------------------------------------------
 workdir="$(mktemp -d)"
-gh repo clone "${repo}" "${workdir}"
+gh repo clone "${repo}" "${workdir}" -- --depth=1
 cd "${workdir}"
 
 # --- run codespell ----------------------------------------------------------
