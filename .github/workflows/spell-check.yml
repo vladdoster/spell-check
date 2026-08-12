@@ -15,6 +15,11 @@ on:
         description: "Comma-separated list of files to skip"
         required: false
         type: string
+      dry-run:
+        description: "Report fixes without forking or pushing"
+        required: false
+        type: boolean
+        default: false
 
 run-name: ${{ inputs.repository }}
 
@@ -35,6 +40,7 @@ jobs:
           repository: ${{ inputs.repository }}
           ignore: ${{ inputs.ignore }}
           skip: ${{ inputs.skip }}
+          dry-run: ${{ inputs.dry-run }}
           github-token: ${{ secrets.GH_PAT }}
 
   deleteFork:
@@ -42,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: Delete fork
     needs: spellcheck
+    # A dry run never creates a fork, so there is nothing to clean up.
+    if: ${{ !inputs.dry-run }}
     steps:
       - name: Checkout action
         uses: actions/checkout@v5

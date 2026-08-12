@@ -23,13 +23,14 @@ to open a pull request. A second, approval-gated `Delete fork` job cleans up the
 
 ### Action inputs
 
-| Input          | Required | Description                                         |
-| -------------- | -------- | --------------------------------------------------- |
-| `repository`   | yes      | Repository slug (`user/repo`) to spell-check.       |
-| `ignore`       | no       | Space-separated words to ignore.                    |
-| `skip`         | no       | Comma-separated files/globs to skip.                |
-| `github-token` | yes      | PAT with fork/push/delete permissions.              |
-| `delete-fork`  | no       | When `true`, delete the fork named by `repository`. |
+| Input          | Required | Description                                                      |
+| -------------- | -------- | ---------------------------------------------------------------- |
+| `repository`   | yes      | Repository slug (`user/repo`) to spell-check.                    |
+| `ignore`       | no       | Space-separated words to ignore.                                 |
+| `skip`         | no       | Comma-separated files/globs to skip.                             |
+| `github-token` | yes      | PAT with fork/push/delete permissions.                           |
+| `delete-fork`  | no       | When `true`, delete the fork named by `repository`.              |
+| `dry-run`      | no       | When `true`, stop after reporting fixes; never fork, push, or delete. |
 
 The workflow supplies the token from the `GH_PAT` repository secret.
 
