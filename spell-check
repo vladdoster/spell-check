@@ -2,15 +2,30 @@
 
 # spell-check: A standalone CLI tool for spell checking repositories
 # Uses codespell to find and fix spelling errors in markdown and text files
+#
+# Adapted for the spell-check skill from vladdoster/spell- (spell-check zsh CLI).
+# Behavioral divergences from the source script, each forced by a real failure
+# or safety issue on macOS (see SKILL.md Gotchas):
+#   - file selection uses a zsh recursive glob (GNU `find -regextype` does not
+#     exist on BSD find)
+#   - clone goes to a mktemp -d dir, not ./target-repo (a skill runs from the
+#     user's project; `rm -rf target-repo` in their CWD is not acceptable)
+#   - adds -n/--dry-run: stop after the report, never fork/push/delete
+#   - GH_TOKEN falls back to `gh auth token` (keyring auth leaves the env unset)
 
 set -e
 setopt ERR_EXIT PIPE_FAIL
+
+# $0 inside a zsh function is the function name (FUNCTION_ARGZERO), so usage()
+# would print "usage" — capture the script name while $0 is still the script.
+typeset -g script_name="${0:t}"
 
 # Default values
 typeset -g repository=""
 typeset -g ignore_words=""
 typeset -g skip_files=""
 typeset -g delete_fork=0
+typeset -g dry_run=0
 typeset -g help=0
 
 # Color output
@@ -21,8 +36,8 @@ typeset -g NC='\033[0m' # No Color
 
 # Print usage information
 usage() {
-  cat <<EOF
-Usage: ${0:t} [OPTIONS]
+  cat << EOF
+Usage: ${script_name} [OPTIONS]
 
 A standalone CLI tool for spell checking repositories using codespell.
 
@@ -31,15 +46,17 @@ OPTIONS:
   -i, --ignore WORDS       Space-separated list of words to ignore
   -s, --skip FILES         Comma-separated list of files to skip
   -d, --delete-fork        Delete fork after completion
+  -n, --dry-run            Stop after the report; never fork, push, or delete
   -h, --help               Show this help message
 
 EXAMPLES:
-  ${0:t} -r owner/repo
-  ${0:t} -r owner/repo -i "myword anotherword"
-  ${0:t} -r owner/repo -s "*.log,*.tmp" -d
+  ${script_name} -r owner/repo -n
+  ${script_name} -r owner/repo
+  ${script_name} -r owner/repo -i "myword anotherword"
+  ${script_name} -r owner/repo -s "*.log,*.tmp" -d
 
 REQUIREMENTS:
-  - gh (GitHub CLI)
+  - gh (GitHub CLI, authenticated)
   - uv (Python package manager)
   - git
 
@@ -70,34 +87,39 @@ parse_args() {
     i:=opt_ignore -ignore:=opt_ignore \
     s:=opt_skip -skip:=opt_skip \
     d=opt_delete_fork -delete-fork=opt_delete_fork \
+    n=opt_dry_run -dry-run=opt_dry_run \
     h=opt_help -help=opt_help \
     || {
       error "Invalid options. Use -h or --help for usage information."
     }
 
   # Process options
-  if (( ${#opt_help} )); then
+  if ((${#opt_help})); then
     usage
   fi
 
-  if (( ${#opt_repository} )); then
+  if ((${#opt_repository})); then
     repository="${opt_repository[-1]}"
   fi
 
-  if (( ${#opt_ignore} )); then
+  if ((${#opt_ignore})); then
     ignore_words="${opt_ignore[-1]}"
   fi
 
-  if (( ${#opt_skip} )); then
+  if ((${#opt_skip})); then
     skip_files="${opt_skip[-1]}"
   fi
 
-  if (( ${#opt_delete_fork} )); then
+  if ((${#opt_delete_fork})); then
     delete_fork=1
   fi
 
+  if ((${#opt_dry_run})); then
+    dry_run=1
+  fi
+
   # Validate required arguments
-  if [[ -z "$repository" ]]; then
+  if [[ -z $repository ]]; then
     error "Repository is required. Use -r or --repository to specify."
   fi
 }
@@ -107,18 +129,22 @@ check_requirements() {
   local -a missing_commands=()
 
   for cmd in gh jq uv git; do
-    if ! command -v "$cmd" &>/dev/null; then
+    if ! command -v "$cmd" &> /dev/null; then
       missing_commands+=("$cmd")
     fi
   done
 
-  if (( ${#missing_commands} > 0 )); then
+  if ((${#missing_commands} > 0)); then
     error "Missing required commands: ${(j:, :)missing_commands}"
   fi
 
-  # Check if GH_TOKEN is set
-  if [[ -z "$GH_TOKEN" ]]; then
-    error "GH_TOKEN environment variable is not set"
+  # gh keyring auth leaves GH_TOKEN unset; mint one so git pushes can use it too.
+  if [[ -z $GH_TOKEN ]]; then
+    GH_TOKEN="$(gh auth token 2> /dev/null || true)"
+    export GH_TOKEN
+  fi
+  if [[ -z $GH_TOKEN ]]; then
+    error "GH_TOKEN is not set and 'gh auth token' returned nothing. Run 'gh auth login'."
   fi
 }
 
@@ -131,7 +157,7 @@ get_repo_info() {
 
   # Get repository information using gh CLI
   local repo_json
-  repo_json=$(gh repo view --json nameWithOwner,name,url "$trimmed" 2>/dev/null) || {
+  repo_json=$(gh repo view --json nameWithOwner,name,url "$trimmed" 2> /dev/null) || {
     error "Failed to fetch repository information for: $trimmed"
   }
 
@@ -145,7 +171,7 @@ get_repo_info() {
   # A repo cannot be forked into the account that already owns it — repo_fork would resolve
   # to the target itself, and pushing to the target is never correct. Bail before cloning.
   # Logins are case-insensitive, so compare lowercased.
-  if [[ "${(L)fork_owner}" == "${(L)repo_name%%/*}" ]]; then
+  if [[ ${(L)fork_owner} == "${(L)repo_name%%/*}" ]]; then
     error "$repo_name is owned by $fork_owner; a fork cannot be created. Run as a different account."
   fi
 
@@ -155,15 +181,11 @@ get_repo_info() {
 
 # Clone the target repository
 clone_repository() {
-  local target_dir="target-repo"
+  local target_dir
+  target_dir="$(mktemp -d)/target-repo"
 
-  if [[ -d "$target_dir" ]]; then
-    warn "Target directory already exists. Removing..."
-    rm -rf "$target_dir"
-  fi
-
-  info "Cloning repository..."
-  gh repo clone "$repo_name" "$target_dir" || {
+  info "Cloning repository into ${target_dir}..."
+  gh repo clone --no-upstream "$repo_name" "$target_dir" -- --depth=1 || {
     error "Failed to clone repository: $repo_name"
   }
 
@@ -182,7 +204,7 @@ run_spell_check() {
   touch "$config_file" "$ignore_file" "$changes_report"
 
   # Handle ignore words
-  if [[ -n "$ignore_words" ]]; then
+  if [[ -n $ignore_words ]]; then
     printf '%s\n' $=ignore_words > "$ignore_file"
 
     if grep -q '[^[:space:]]' "$ignore_file"; then
@@ -190,13 +212,16 @@ run_spell_check() {
     else
       warn "Ignore file is empty or contains only whitespace"
     fi
+  else
+    # touch keeps a stale list from an earlier run alive; empty it explicitly.
+    : > "$ignore_file"
   fi
 
   # Create codespell configuration
   printf '[codespell]\nignore-words = %s\ninteractive = 2\n' "$ignore_file" > "$config_file"
 
   # Handle skip files
-  if [[ -n "$skip_files" ]]; then
+  if [[ -n $skip_files ]]; then
     printf 'skip = %s\n' "$skip_files" >> "$config_file"
     info "Skipping files: $skip_files"
   fi
@@ -206,15 +231,23 @@ run_spell_check() {
   cat "$config_file"
 
   # Save current state before running codespell
-  git add -A 2>/dev/null || true
-  git stash push -m "before-spell-check" 2>/dev/null || true
+  git add -A 2> /dev/null || true
+  git stash push -m "before-spell-check" 2> /dev/null || true
 
-  # Run codespell on markdown and text files
-  find . \
-    -type f \
-    -regextype posix-egrep \
-    -regex ".*\.(mdx|md|txt)$" \
-    -exec sh -c 'yes " " | uvx codespell --config "/tmp/codespell.cfg" -w "$@"' sh {} +
+  # Run codespell on markdown and text files. BSD find has no -regextype, so
+  # select files with a zsh recursive glob instead; NUL-separate for xargs in
+  # case of hostile filenames. codespell exits non-zero when it writes fixes,
+  # so its status is not a failure.
+  local -a spell_targets
+  spell_targets=(**/*.(md|mdx|txt)(.N))
+  if ((${#spell_targets} == 0)); then
+    warn "No markdown or text files found to check"
+    return 0
+  fi
+  info "Checking ${#spell_targets} files..."
+  print -rN -- "${spell_targets[@]}" \
+    | xargs -0 sh -c 'yes " " | uvx codespell --check-filenames --config "/tmp/codespell.cfg" -w "$@"' sh \
+    || true
 }
 
 # Generate spell check report
@@ -225,14 +258,14 @@ generate_spell_report() {
   local summary_file="/tmp/spell-summary.txt"
 
   # Clear previous reports
-  > "$report_file"
-  > "$summary_file"
+  rm -f "$report_file"
+  rm -f "$summary_file"
 
   # Get list of changed files
   local -a changed_files
   changed_files=($(git diff --name-only))
 
-  if (( ${#changed_files} == 0 )); then
+  if ((${#changed_files} == 0)); then
     return 1
   fi
 
@@ -243,14 +276,14 @@ generate_spell_report() {
 
   # Process each changed file
   for file in "${changed_files[@]}"; do
-    if [[ ! -f "$file" ]]; then
+    if [[ ! -f $file ]]; then
       continue
     fi
 
-    # Get the diff for this file
     local file_diff=$(git diff "$file")
+    # Get the diff for this file
 
-    if [[ -z "$file_diff" ]]; then
+    if [[ -z $file_diff ]]; then
       continue
     fi
 
@@ -263,11 +296,13 @@ generate_spell_report() {
     local before_line=""
     local after_line=""
 
-    # Parse diff output to extract changed words only
+    # Parse diff output to extract changed words only. Glob matches, not =~:
+    # macOS regcomp rejects the pattern '^+' outright ("repetition-operator
+    # operand invalid"), which silently breaks the =~ version of this loop.
     echo "$file_diff" | grep -E '^[-+]' | grep -v -E '^(---|\+\+\+)' | while IFS= read -r line; do
-      if [[ "$line" =~ ^- ]]; then
+      if [[ $line == -* ]]; then
         before_line="${line:1}"
-      elif [[ "$line" =~ ^+ ]] && [[ -n "$before_line" ]]; then
+      elif [[ $line == +* ]] && [[ -n $before_line ]]; then
         after_line="${line:1}"
 
         # Compare words and extract differences
@@ -277,17 +312,19 @@ generate_spell_report() {
 
         # Find differing words by comparing position by position
         local max_len=${#before_words}
-        (( ${#after_words} > max_len )) && max_len=${#after_words}
+        ((${#after_words} > max_len)) && max_len=${#after_words}
 
-        for ((i=1; i<=max_len; i++)); do
+        for ((i = 1; i <= max_len; i++)); do
           local before_word="${before_words[i]}"
           local after_word="${after_words[i]}"
 
           # If words differ, display them
-          if [[ "$before_word" != "$after_word" ]]; then
-            if [[ -n "$before_word" && -n "$after_word" ]]; then
+          if [[ $before_word != "$after_word" ]]; then
+            if [[ -n $before_word && -n $after_word ]]; then
               printf "  ${RED}%s${NC} → ${GREEN}%s${NC}\n" "$before_word" "$after_word" | tee -a "$report_file"
-              ((changes_in_file++))
+              # Post-increment returns the old value, so ((x++)) from 0 has
+              # status 1 and ERR_EXIT kills the whole report. Plain assignment.
+              changes_in_file=$((changes_in_file + 1))
             fi
           fi
         done
@@ -297,7 +334,7 @@ generate_spell_report() {
       fi
     done
 
-    if (( changes_in_file > 0 )); then
+    if ((changes_in_file > 0)); then
       total_changes=$((total_changes + changes_in_file))
       printf "\n" | tee -a "$report_file"
     fi
@@ -331,7 +368,7 @@ setup_git_credentials() {
   info "Setting up git credentials..."
 
   local git_user="${GITHUB_REPOSITORY_OWNER:-$(gh api user -q '.login')}"
-  local git_email=$(gh api user/public_emails -q '.[0].email')
+  local git_email=$(gh api user/public_emails -q '.[0].email' 2> /dev/null || echo "${git_user}@users.noreply.github.com")
 
   git config user.name "$git_user"
   git config user.email "$git_email"
@@ -354,12 +391,12 @@ fork_repository() {
 
   local parent=""
   for i in {1..5}; do
-    parent=$(gh repo view --json isFork,parent -q 'select(.isFork) | "\(.parent.owner.login)/\(.parent.name)"' "$repo_fork" 2>/dev/null) || parent=""
-    [[ "${(L)parent}" == "${(L)repo_name}" ]] && break
-    (( i < 5 )) && sleep 3
+    parent=$(gh repo view --json isFork,parent -q 'select(.isFork) | "\(.parent.owner.login)/\(.parent.name)"' "$repo_fork" 2> /dev/null) || parent=""
+    [[ ${(L)parent} == "${(L)repo_name}" ]] && break
+    ((i < 5)) && sleep 3
   done
 
-  if [[ "${(L)parent}" != "${(L)repo_name}" ]]; then
+  if [[ ${(L)parent} != "${(L)repo_name}" ]]; then
     error "$repo_fork is not a fork of $repo_name (parent: ${parent:-none}); refusing to push."
   fi
 
@@ -373,7 +410,12 @@ commit_and_push() {
   git switch --force-create docs/fix-spelling || error "Failed to create branch"
   git add -A || error "Failed to stage changes"
   git commit -m "docs: correct spelling" --signoff || error "Failed to commit changes"
-  git push origin docs/fix-spelling || error "Failed to push changes"
+  # A prior run leaves docs/fix-spelling on the fork; a fresh upstream clone can
+  # never fast-forward onto it, so plain push rejects with "fetch first". The
+  # branch is tool-owned and the fork's parentage was just verified, so --force
+  # is safe. --force-with-lease cannot work here: this clone has no
+  # remote-tracking ref for the fork, so the lease is always "stale".
+  git push --force origin docs/fix-spelling || error "Failed to push changes"
 
   info "Changes pushed to: ${repo_fork_url}"
   info "Branch: docs/fix-spelling"
@@ -385,12 +427,12 @@ delete_fork_repo() {
 
   # Never delete on an unverified slug: it must exist and actually be a fork.
   local is_fork
-  is_fork=$(gh repo view --json isFork -q '.isFork' "$repo_fork" 2>/dev/null) || {
+  is_fork=$(gh repo view --json isFork -q '.isFork' "$repo_fork" 2> /dev/null) || {
     warn "Fork $repo_fork not found (nothing to delete)"
     return 0
   }
 
-  if [[ "$is_fork" != "true" ]]; then
+  if [[ $is_fork != "true" ]]; then
     error "$repo_fork is not a fork; refusing to delete."
   fi
 
@@ -411,12 +453,18 @@ main() {
   run_spell_check
 
   if check_for_changes; then
-    setup_git_credentials
-    fork_repository
-    commit_and_push
+    if ((dry_run == 1)); then
+      info "Dry run: stopping before fork/push."
+      info "A full run would fork $repo_name to $repo_fork and push branch docs/fix-spelling."
+      info "Corrected clone left at: $PWD"
+    else
+      setup_git_credentials
+      fork_repository
+      commit_and_push
 
-    info "Spell check completed successfully!"
-    info "Please create a pull request from the fork to the original repository."
+      info "Spell check completed successfully!"
+      info "Please create a pull request from the fork to the original repository."
+    fi
   else
     info "No changes needed. Repository is clean!"
   fi
@@ -425,8 +473,12 @@ main() {
   cd "$original_dir"
 
   # Delete fork if requested
-  if (( delete_fork == 1 )); then
-    delete_fork_repo
+  if ((delete_fork == 1)); then
+    if ((dry_run == 1)); then
+      warn "Dry run: skipping fork deletion."
+    else
+      delete_fork_repo
+    fi
   fi
 }
 
