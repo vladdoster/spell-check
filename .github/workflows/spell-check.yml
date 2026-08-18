@@ -33,9 +33,9 @@ jobs:
       - name: Checkout action
         uses: actions/checkout@v5
 
-      # The runs API does not expose workflow_dispatch inputs, so Re-run reads them
-      # from this cache entry, keyed by run ID. Written before the fixer runs so a
-      # failed run is still re-runnable.
+      # The runs API does not expose workflow_dispatch inputs, so Re-run downloads
+      # them from this artifact. Written before the fixer runs so a failed run is
+      # still re-runnable.
       - name: Record inputs
         env:
           IN_REPOSITORY: ${{ inputs.repository }}
@@ -51,11 +51,12 @@ jobs:
             '{repository: $repository, ignore: $ignore, skip: $skip, "dry-run": $dry_run}' \
             >"${RUNNER_TEMP}/inputs.json"
 
-      - name: Cache inputs for re-run
-        uses: actions/cache/save@v6
+      - name: Upload inputs for re-run
+        uses: actions/upload-artifact@v7
         with:
+          name: spellcheck-inputs
           path: ${{ runner.temp }}/inputs.json
-          key: spellcheck-inputs-${{ github.run_id }}
+          retention-days: 30
 
       - name: Run codespell fixer
         id: spell

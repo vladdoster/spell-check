@@ -114,35 +114,39 @@ jobs:
           echo "id=${prev}" >>"${GITHUB_OUTPUT}"
           echo "::notice ::Previous run: ${prev:-<none>}"
 
-      # Keyed by run ID, so a miss means the entry aged out rather than never existed.
-      - name: Restore cached inputs
-        id: cache
+      # Retained 30 days, so a miss means the artifact expired or the run predates it.
+      # Non-fatal: the read step below degrades to the run title instead.
+      - name: Download previous run inputs
+        id: fetch
         if: steps.prev.outputs.id != ''
-        uses: actions/cache/restore@v6
+        continue-on-error: true
+        uses: actions/download-artifact@v8
         with:
-          path: ${{ runner.temp }}/inputs.json
-          key: spellcheck-inputs-${{ steps.prev.outputs.id }}
+          name: spellcheck-inputs
+          path: ${{ runner.temp }}
+          run-id: ${{ steps.prev.outputs.id }}
+          github-token: ${{ secrets.GH_PAT }}
 
       - name: Read previous run inputs
         id: read
         env:
           PREV: ${{ steps.prev.outputs.id }}
-          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+          FETCHED: ${{ steps.fetch.outcome }}
         run: |
           set -eu
           repository="" skip="" ignore="" source="none"
           if [ -n "${PREV}" ]; then
-            if [ "${CACHE_HIT}" = "true" ] && [ -f "${RUNNER_TEMP}/inputs.json" ]; then
+            if [ "${FETCHED}" = "success" ] && [ -f "${RUNNER_TEMP}/inputs.json" ]; then
               repository=$(jq -r '.repository // ""' "${RUNNER_TEMP}/inputs.json")
               ignore=$(jq -r '.ignore // ""' "${RUNNER_TEMP}/inputs.json")
               skip=$(jq -r '.skip // ""' "${RUNNER_TEMP}/inputs.json")
-              source="cache"
+              source="artifact"
             else
-              # Cache entries are evicted after 7 days without a read. run-name still
-              # carries the repository, so degrade to that rather than failing.
+              # Artifacts are retained 30 days. run-name still carries the repository,
+              # so degrade to that rather than failing.
               repository=$(gh run view "${PREV}" --json displayTitle -q '.displayTitle // empty')
-              source="run title (cache miss)"
-              echo "::warning ::No cached inputs for run ${PREV}; skip/ignore not recovered"
+              source="run title (no artifact)"
+              echo "::warning ::No inputs artifact for run ${PREV}; skip/ignore not recovered"
             fi
           fi
           echo "::notice ::Retrieved from ${source}: repository=${repository:-<none>} skip=${skip:-<none>} ignore=${ignore:-<none>}"
