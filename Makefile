@@ -22,8 +22,8 @@ endif
 
 REPOSITORY :=
 
-run: build ## Run the image (requires GH_TOKEN env and REPOSITORY=user/repo; optional IGNORE, SKIP)
-	docker run --rm -e GH_TOKEN $(IMAGE_REF) $(REPOSITORY) '$(IGNORE)' '$(SKIP)'
+run: build ## Run the image (requires GH_TOKEN env and REPOSITORY=user/repo; optional IGNORE, SKIP, DRY_RUN=true)
+	docker run --rm -e GH_TOKEN -e INPUT_DRY_RUN=$(DRY_RUN) $(IMAGE_REF) $(REPOSITORY) '$(IGNORE)' '$(SKIP)'
 
 clean: ## Remove the Docker image
 	-docker rmi $(IMAGE_REF)

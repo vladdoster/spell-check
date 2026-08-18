@@ -16,6 +16,7 @@ fi
 repository="${1:-${INPUT_REPOSITORY:-}}"
 ignore="${2:-${INPUT_IGNORE:-}}"
 skip="${3:-${INPUT_SKIP:-}}"
+dry_run="${INPUT_DRY_RUN:-false}"
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
 # Append to the job step summary / outputs only when running under Actions.
@@ -70,6 +71,10 @@ list_spell_targets() {
 
 # --- delete mode (used by the approval-gated cleanup job) -------------------
 if [ "${INPUT_DELETE_FORK:-false}" = "true" ]; then
+  if [ "${dry_run}" = "true" ]; then
+    echo "::notice ::Dry run: skipping fork deletion."
+    exit 0
+  fi
   [ -n "${repository}" ] || {
     echo "::error ::repository input is required"
     exit 1
@@ -152,6 +157,16 @@ if git diff --exit-code --quiet; then
 fi
 echo "Spelling fixes written."
 
+branch='docs/fix-spelling'
+
+# --- dry run: report and stop ------------------------------------------------
+if [ "${dry_run}" = "true" ]; then
+  git --no-pager diff --stat
+  step_summary "> [!NOTE]\n> Dry run: fixes were not pushed. A full run would fork ${repo} to [${repoFork}](${repoForkUrl}) and push branch \`${branch}\`.\n"
+  echo "::notice ::Dry run: stopping before fork/push."
+  exit 0
+fi
+
 # --- git identity + push credentials ----------------------------------------
 git config user.name "${owner}"
 git config user.email "$(gh api user/public_emails --jq '.[0].email' 2>/dev/null || echo "${owner}@users.noreply.github.com")"
@@ -182,7 +197,6 @@ done
 
 git remote set-url origin "${repoForkUrl}.git"
 
-branch='docs/fix-spelling'
 git switch --force-create "${branch}"
 git add -A
 git commit --signoff --message 'docs: correct spelling'
