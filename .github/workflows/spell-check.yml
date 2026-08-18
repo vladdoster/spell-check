@@ -60,3 +60,13 @@ jobs:
           repository: ${{ needs.spellcheck.outputs.repoFork }}
           delete-fork: "true"
           github-token: ${{ secrets.GH_PAT }}
+
+  # Persists dispatch inputs for the Re-run workflow: the runs API does not expose
+  # workflow_dispatch inputs, but the jobs API returns job names. Pipe-delimited;
+  # neither skip globs nor ignore words contain a pipe. repository is omitted
+  # because run-name already carries it as the run's displayTitle.
+  record-inputs:
+    name: "prev-inputs|skip=${{ inputs.skip }}|ignore=${{ inputs.ignore }}"
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
