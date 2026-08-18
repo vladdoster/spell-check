@@ -118,7 +118,8 @@ if [ "$(lower "${owner}")" = "$(lower "${repo%%/*}")" ]; then
   exit 1
 fi
 
-# Emit outputs early so the cleanup job has them even when nothing changes.
+# Emit the fork identity before any early exit so callers see the slug this run would
+# use even when it is never created. `pushed` is set only after a real push.
 set_output repoFork "${repoFork}"
 set_output repoForkUrl "${repoForkUrl}"
 step_summary "### [${repo}](${repoUrl})\n"
@@ -202,6 +203,9 @@ git switch --force-create "${branch}"
 git add -A
 git commit --signoff --message 'docs: correct spelling'
 git push --force origin "${branch}"
+
+# The cleanup job gates on this: it is the only signal that a fork now exists.
+set_output pushed true
 
 step_summary "### [${repoFork}](${repoForkUrl}/pull/new/${branch})\n"
 echo "Pushed fixes to ${repoForkUrl} (branch ${branch})"

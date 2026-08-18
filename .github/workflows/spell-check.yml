@@ -29,6 +29,7 @@ jobs:
     outputs:
       repoFork: ${{ steps.spell.outputs.repoFork }}
       repoForkUrl: ${{ steps.spell.outputs.repoForkUrl }}
+      pushed: ${{ steps.spell.outputs.pushed }}
     steps:
       - name: Checkout action
         uses: actions/checkout@v5
@@ -73,8 +74,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: Delete fork
     needs: spellcheck
-    # A dry run never creates a fork, so there is nothing to clean up.
-    if: ${{ !inputs.dry-run }}
+    # Only a run that pushed has a fork to remove. A dry run and a clean target both
+    # leave `pushed` empty, so this subsumes the old dry-run gate and stops a no-op
+    # run from parking a pending approval on the Delete fork environment.
+    if: ${{ needs.spellcheck.outputs.pushed == 'true' }}
     steps:
       - name: Checkout action
         uses: actions/checkout@v5
