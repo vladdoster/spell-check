@@ -152,7 +152,8 @@ fi
 
 # --- detect changes ---------------------------------------------------------
 if git diff --exit-code --quiet; then
-  echo "No spelling errors found."
+  step_summary "> [!NOTE]\n> No spelling errors found; no fork was created.\n"
+  echo "::notice ::No spelling errors found in ${repo}; nothing to fork or push."
   exit 0
 fi
 echo "Spelling fixes written."
