@@ -114,27 +114,38 @@ jobs:
           echo "id=${prev}" >>"${GITHUB_OUTPUT}"
           echo "::notice ::Previous run: ${prev:-<none>}"
 
+      # Keyed by run ID, so a miss means the entry aged out rather than never existed.
+      - name: Restore cached inputs
+        id: cache
+        if: steps.prev.outputs.id != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/inputs.json
+          key: spellcheck-inputs-${{ steps.prev.outputs.id }}
+
       - name: Read previous run inputs
         id: read
         env:
           PREV: ${{ steps.prev.outputs.id }}
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         run: |
           set -eu
-          repository="" skip="" ignore=""
+          repository="" skip="" ignore="" source="none"
           if [ -n "${PREV}" ]; then
-            # run-name is the repository input, so displayTitle carries it verbatim.
-            repository=$(gh run view "${PREV}" --json displayTitle -q '.displayTitle // empty')
-            # skip/ignore are unrecoverable from the runs API; the marker job's name
-            # carries them. Runs predating that job yield an empty marker.
-            marker=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${PREV}/jobs" \
-              --jq '[.jobs[].name | select(startswith("prev-inputs|"))] | first // empty')
-            if [ -n "${marker}" ]; then
-              skip=$(printf '%s\n' "${marker}" | awk -F'|' '{for(i=1;i<=NF;i++) if($i ~ /^skip=/) {sub(/^skip=/,"",$i); print $i}}')
-              ignore=$(printf '%s\n' "${marker}" | awk -F'|' '{for(i=1;i<=NF;i++) if($i ~ /^ignore=/) {sub(/^ignore=/,"",$i); print $i}}')
+            if [ "${CACHE_HIT}" = "true" ] && [ -f "${RUNNER_TEMP}/inputs.json" ]; then
+              repository=$(jq -r '.repository // ""' "${RUNNER_TEMP}/inputs.json")
+              ignore=$(jq -r '.ignore // ""' "${RUNNER_TEMP}/inputs.json")
+              skip=$(jq -r '.skip // ""' "${RUNNER_TEMP}/inputs.json")
+              source="cache"
             else
-              echo "::warning ::Run ${PREV} has no prev-inputs job; skip/ignore not recovered"
+              # Cache entries are evicted after 7 days without a read. run-name still
+              # carries the repository, so degrade to that rather than failing.
+              repository=$(gh run view "${PREV}" --json displayTitle -q '.displayTitle // empty')
+              source="run title (cache miss)"
+              echo "::warning ::No cached inputs for run ${PREV}; skip/ignore not recovered"
             fi
           fi
+          echo "::notice ::Retrieved from ${source}: repository=${repository:-<none>} skip=${skip:-<none>} ignore=${ignore:-<none>}"
           {
             echo "repository=${repository}"
             echo "skip=${skip}"
@@ -219,7 +230,8 @@ jobs:
           {
             echo '| Workflow | Status | Run | Created |'
             echo '|---|---|---|---|'
-            printf '| $\\textcolor{cyan}{\\textsf{%s}}$ | $\\textcolor{%s}{\\textsf{%s}}$ | [%s](%s) | %s |\n' \
+            # shellcheck disable=SC2016  # the $ are MathJax delimiters, not shell expansions
+            printf '| $\\textcolor{cyan}{\\texttt{%s}}$ | $\\textcolor{%s}{\\texttt{%s}}$ | [`%s`](%s) | `%s` |\n' \
               "${name}" "${color}" "${state}" "${NEW}" "${url}" "${when}"
           } >>"${GITHUB_STEP_SUMMARY}"
           echo "::notice ::${name} ${state} ${url} ${when}"
