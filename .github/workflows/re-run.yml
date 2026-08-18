@@ -118,7 +118,7 @@ jobs:
       - name: Restore cached inputs
         id: cache
         if: steps.prev.outputs.id != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/inputs.json
           key: spellcheck-inputs-${{ steps.prev.outputs.id }}

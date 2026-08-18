@@ -52,7 +52,7 @@ jobs:
             >"${RUNNER_TEMP}/inputs.json"
 
       - name: Cache inputs for re-run
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/inputs.json
           key: spellcheck-inputs-${{ github.run_id }}
