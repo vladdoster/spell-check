@@ -1,0 +1,223 @@
+name: Re-run
+
+on:
+  workflow_dispatch:
+    inputs:
+      use-previous:
+        description: "Re-use the most recent Spell Check run"
+        required: false
+        type: boolean
+        default: false
+      workflow-run:
+        description: "Spell Check run ID or run number to re-use"
+        required: false
+        type: string
+      repository:
+        description: "Repository slug (user/repo); ignored when a previous run resolves"
+        required: false
+        type: string
+      ignore:
+        description: "Space-separated list of words to ignore"
+        required: false
+        type: string
+      skip:
+        description: "Comma-separated list of files to skip"
+        required: false
+        type: string
+      dry-run:
+        description: "Report fixes without forking or pushing"
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      use-previous:
+        required: false
+        type: boolean
+        default: false
+      workflow-run:
+        required: false
+        type: string
+      repository:
+        required: false
+        type: string
+      ignore:
+        required: false
+        type: string
+      skip:
+        required: false
+        type: string
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      GH_PAT:
+        required: true
+
+run-name: ${{ inputs.workflow-run && format('run {0}', inputs.workflow-run) || (inputs.use-previous && 'most recent run' || inputs.repository) }}
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    # Every gh call below authenticates with GH_PAT, so the ambient token needs nothing.
+    permissions: {}
+    env:
+      # A workflow_dispatch made with GITHUB_TOKEN silently creates no run, so every
+      # gh call here uses the PAT.
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      TARGET_WORKFLOW: spell-check.yml
+      USE_PREVIOUS: ${{ inputs.use-previous }}
+      WORKFLOW_RUN: ${{ inputs.workflow-run }}
+      IN_REPOSITORY: ${{ inputs.repository }}
+      IN_SKIP: ${{ inputs.skip }}
+      IN_IGNORE: ${{ inputs.ignore }}
+      # Specified per re-run rather than inherited from <prev>; the marker job does
+      # not carry it.
+      DRY_RUN: ${{ inputs.dry-run }}
+    steps:
+      - name: Resolve previous run
+        id: prev
+        run: |
+          set -eu
+          prev=""
+          if [ -n "${WORKFLOW_RUN}" ]; then
+            case "${WORKFLOW_RUN}" in
+              '' | *[!0-9]*)
+                echo "::error ::workflow-run must be a positive integer, got '${WORKFLOW_RUN}'"
+                exit 1
+                ;;
+            esac
+            # Run IDs are ~11 digits and appear in run URLs; run numbers are small
+            # per-workflow counters. Disambiguate by magnitude.
+            if [ "${WORKFLOW_RUN}" -gt 1000000 ]; then
+              prev="${WORKFLOW_RUN}"
+            else
+              prev=$(gh run list --workflow="${TARGET_WORKFLOW}" --limit 100 \
+                --json databaseId,number \
+                -q "[.[] | select(.number == ${WORKFLOW_RUN})] | first | .databaseId // empty")
+              [ -n "${prev}" ] || {
+                echo "::error ::No ${TARGET_WORKFLOW} run number ${WORKFLOW_RUN} in the last 100 runs"
+                exit 1
+              }
+            fi
+          elif [ "${USE_PREVIOUS}" = "true" ]; then
+            prev=$(gh run list --workflow="${TARGET_WORKFLOW}" --limit 1 \
+              --json databaseId -q '.[0].databaseId // empty')
+            [ -n "${prev}" ] || {
+              echo "::error ::use-previous is set but no ${TARGET_WORKFLOW} run exists"
+              exit 1
+            }
+          fi
+          echo "id=${prev}" >>"${GITHUB_OUTPUT}"
+          echo "::notice ::Previous run: ${prev:-<none>}"
+
+      - name: Read previous run inputs
+        id: read
+        env:
+          PREV: ${{ steps.prev.outputs.id }}
+        run: |
+          set -eu
+          repository="" skip="" ignore=""
+          if [ -n "${PREV}" ]; then
+            # run-name is the repository input, so displayTitle carries it verbatim.
+            repository=$(gh run view "${PREV}" --json displayTitle -q '.displayTitle // empty')
+            # skip/ignore are unrecoverable from the runs API; the marker job's name
+            # carries them. Runs predating that job yield an empty marker.
+            marker=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${PREV}/jobs" \
+              --jq '[.jobs[].name | select(startswith("prev-inputs|"))] | first // empty')
+            if [ -n "${marker}" ]; then
+              skip=$(printf '%s\n' "${marker}" | awk -F'|' '{for(i=1;i<=NF;i++) if($i ~ /^skip=/) {sub(/^skip=/,"",$i); print $i}}')
+              ignore=$(printf '%s\n' "${marker}" | awk -F'|' '{for(i=1;i<=NF;i++) if($i ~ /^ignore=/) {sub(/^ignore=/,"",$i); print $i}}')
+            else
+              echo "::warning ::Run ${PREV} has no prev-inputs job; skip/ignore not recovered"
+            fi
+          fi
+          {
+            echo "repository=${repository}"
+            echo "skip=${skip}"
+            echo "ignore=${ignore}"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Combine inputs
+        id: merge
+        env:
+          PREV_REPOSITORY: ${{ steps.read.outputs.repository }}
+          PREV_SKIP: ${{ steps.read.outputs.skip }}
+          PREV_IGNORE: ${{ steps.read.outputs.ignore }}
+        run: |
+          set -eu
+          # Union of previous and new values, previous first, order-preserving dedup.
+          # action.yml defines ignore as space-separated and skip as comma-separated,
+          # so the separator differs per field and must not be unified.
+          merge() {
+            printf '%s%s%s' "$2" "$1" "$3" | tr "$1" '\n' | grep -v '^$' | awk '!seen[$0]++' | paste -sd"$1" -
+          }
+          repository="${PREV_REPOSITORY:-${IN_REPOSITORY}}"
+          [ -n "${repository}" ] || {
+            echo "::error ::repository is required when no previous run is selected"
+            exit 1
+          }
+          {
+            echo "repository=${repository}"
+            echo "skip=$(merge ',' "${PREV_SKIP}" "${IN_SKIP}")"
+            echo "ignore=$(merge ' ' "${PREV_IGNORE}" "${IN_IGNORE}")"
+          } >>"${GITHUB_OUTPUT}"
+
+      - name: Dispatch Spell Check
+        id: dispatch
+        env:
+          REPOSITORY: ${{ steps.merge.outputs.repository }}
+          SKIP: ${{ steps.merge.outputs.skip }}
+          IGNORE: ${{ steps.merge.outputs.ignore }}
+        run: |
+          set -eu
+          latest() {
+            gh run list --workflow="${TARGET_WORKFLOW}" --limit 1 --json databaseId -q '.[0].databaseId // 0'
+          }
+          before=$(latest)
+          gh workflow run "${TARGET_WORKFLOW}" \
+            -f repository="${REPOSITORY}" \
+            -f skip="${SKIP}" \
+            -f ignore="${IGNORE}" \
+            -f dry-run="${DRY_RUN}"
+          # The dispatch API returns 204 with no body, so poll for a run newer than
+          # the pre-dispatch baseline.
+          new="${before}"
+          i=0
+          while [ "${i}" -lt 30 ]; do
+            new=$(latest)
+            [ "${new}" != "${before}" ] && break
+            sleep 2
+            i=$((i + 1))
+          done
+          if [ "${new}" = "${before}" ]; then
+            echo "::error ::Dispatched ${TARGET_WORKFLOW} but no new run appeared; check that GH_PAT is set"
+            exit 1
+          fi
+          echo "id=${new}" >>"${GITHUB_OUTPUT}"
+
+      - name: Annotate dispatched run
+        env:
+          NEW: ${{ steps.dispatch.outputs.id }}
+        run: |
+          set -eu
+          run=$(gh run view "${NEW}" --json workflowName,status,conclusion,url,createdAt)
+          name=$(printf '%s' "${run}" | jq -r .workflowName)
+          url=$(printf '%s' "${run}" | jq -r .url)
+          created=$(printf '%s' "${run}" | jq -r .createdAt)
+          # A run still in flight has an empty conclusion; report its status instead.
+          state=$(printf '%s' "${run}" | jq -r 'if .conclusion == "" or .conclusion == null then .status else .conclusion end')
+          case "${state}" in
+            success) color=green ;;
+            failure | cancelled | timed_out | startup_failure) color=red ;;
+            *) color=orange ;;
+          esac
+          when=$(date -u -d "${created}" '+%Y-%m-%d %H:%M UTC')
+          {
+            echo '| Workflow | Status | Run | Created |'
+            echo '|---|---|---|---|'
+            printf '| $\\textcolor{cyan}{\\textsf{%s}}$ | $\\textcolor{%s}{\\textsf{%s}}$ | [%s](%s) | %s |\n' \
+              "${name}" "${color}" "${state}" "${NEW}" "${url}" "${when}"
+          } >>"${GITHUB_STEP_SUMMARY}"
+          echo "::notice ::${name} ${state} ${url} ${when}"
