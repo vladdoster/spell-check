@@ -66,6 +66,8 @@ jobs:
       # A workflow_dispatch made with GITHUB_TOKEN silently creates no run, so every
       # gh call here uses the PAT.
       GH_TOKEN: ${{ secrets.GH_PAT }}
+      # No checkout runs here, so gh cannot infer the repo from git context.
+      GH_REPO: ${{ github.repository }}
       TARGET_WORKFLOW: spell-check.yml
       USE_PREVIOUS: ${{ inputs.use-previous }}
       WORKFLOW_RUN: ${{ inputs.workflow-run }}
