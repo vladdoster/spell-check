@@ -55,13 +55,20 @@ on:
       GH_PAT:
         required: true
 
-run-name: ${{ inputs.workflow-run && format('run {0}', inputs.workflow-run) || (inputs.use-previous && 'most recent run' || inputs.repository) }}
+run-name: re-run ${{ inputs.workflow-run && format('#{0}', inputs.workflow-run) || (inputs.use-previous && 'latest spell-check' || inputs.repository) }}
 
 jobs:
-  rerun:
+  # Split from the dispatch job so that job's name can interpolate needs.* — a job
+  # name is evaluated when the job is scheduled, unlike run-name which is fixed
+  # before any job runs and so cannot see the resolved repository or run number.
+  resolve:
     runs-on: ubuntu-latest
-    # Every gh call below authenticates with GH_PAT, so the ambient token needs nothing.
     permissions: {}
+    outputs:
+      label: ${{ steps.merge.outputs.label }}
+      repository: ${{ steps.merge.outputs.repository }}
+      skip: ${{ steps.merge.outputs.skip }}
+      ignore: ${{ steps.merge.outputs.ignore }}
     env:
       # A workflow_dispatch made with GITHUB_TOKEN silently creates no run, so every
       # gh call here uses the PAT.
@@ -74,15 +81,12 @@ jobs:
       IN_REPOSITORY: ${{ inputs.repository }}
       IN_SKIP: ${{ inputs.skip }}
       IN_IGNORE: ${{ inputs.ignore }}
-      # Specified per re-run rather than inherited from <prev>; the marker job does
-      # not carry it.
-      DRY_RUN: ${{ inputs.dry-run }}
     steps:
       - name: Resolve previous run
         id: prev
         run: |
           set -eu
-          prev=""
+          prev="" number=""
           if [ -n "${WORKFLOW_RUN}" ]; then
             case "${WORKFLOW_RUN}" in
               '' | *[!0-9]*)
@@ -111,8 +115,14 @@ jobs:
               exit 1
             }
           fi
-          echo "id=${prev}" >>"${GITHUB_OUTPUT}"
-          echo "::notice ::Previous run: ${prev:-<none>}"
+          # The run number is what the Actions UI shows as #N, so it is the useful
+          # half of the identity in a job label.
+          [ -n "${prev}" ] && number=$(gh run view "${prev}" --json number -q '.number // empty')
+          {
+            echo "id=${prev}"
+            echo "number=${number}"
+          } >>"${GITHUB_OUTPUT}"
+          echo "::notice ::Previous run: ${prev:-<none>}${number:+ (#${number})}"
 
       - name: Read previous run inputs
         id: read
@@ -152,6 +162,7 @@ jobs:
           PREV_REPOSITORY: ${{ steps.read.outputs.repository }}
           PREV_SKIP: ${{ steps.read.outputs.skip }}
           PREV_IGNORE: ${{ steps.read.outputs.ignore }}
+          PREV_NUMBER: ${{ steps.prev.outputs.number }}
         run: |
           set -eu
           # Union of previous and new values, previous first, order-preserving dedup.
@@ -165,18 +176,33 @@ jobs:
             echo "::error ::repository is required when no previous run is selected"
             exit 1
           }
+          # repository may arrive as a slug or a full URL; the label wants owner/name.
+          repoName="${repository#https://github.com/}"
+          repoName="${repoName%.git}"
+          repoName="${repoName%/}"
           {
             echo "repository=${repository}"
+            echo "label=${repoName}${PREV_NUMBER:+ #${PREV_NUMBER}}"
             echo "skip=$(merge ',' "${PREV_SKIP}" "${IN_SKIP}")"
             echo "ignore=$(merge ' ' "${PREV_IGNORE}" "${IN_IGNORE}")"
           } >>"${GITHUB_OUTPUT}"
 
+  dispatch:
+    needs: resolve
+    name: re-run ${{ needs.resolve.outputs.label }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      GH_REPO: ${{ github.repository }}
+      TARGET_WORKFLOW: spell-check.yml
+      DRY_RUN: ${{ inputs.dry-run }}
+      REPOSITORY: ${{ needs.resolve.outputs.repository }}
+      SKIP: ${{ needs.resolve.outputs.skip }}
+      IGNORE: ${{ needs.resolve.outputs.ignore }}
+    steps:
       - name: Dispatch Spell Check
         id: dispatch
-        env:
-          REPOSITORY: ${{ steps.merge.outputs.repository }}
-          SKIP: ${{ steps.merge.outputs.skip }}
-          IGNORE: ${{ steps.merge.outputs.ignore }}
         run: |
           set -eu
           latest() {
