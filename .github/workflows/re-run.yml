@@ -114,29 +114,19 @@ jobs:
           echo "id=${prev}" >>"${GITHUB_OUTPUT}"
           echo "::notice ::Previous run: ${prev:-<none>}"
 
-      # Retained 30 days, so a miss means the artifact expired or the run predates it.
-      # Non-fatal: the read step below degrades to the run title instead.
-      - name: Download previous run inputs
-        id: fetch
-        if: steps.prev.outputs.id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: spellcheck-inputs
-          path: ${{ runner.temp }}
-          run-id: ${{ steps.prev.outputs.id }}
-          github-token: ${{ secrets.GH_PAT }}
-
       - name: Read previous run inputs
         id: read
         env:
           PREV: ${{ steps.prev.outputs.id }}
-          FETCHED: ${{ steps.fetch.outcome }}
         run: |
           set -eu
           repository="" skip="" ignore="" source="none"
           if [ -n "${PREV}" ]; then
-            if [ "${FETCHED}" = "success" ] && [ -f "${RUNNER_TEMP}/inputs.json" ]; then
+            # A miss means the artifact expired (30-day retention) or the run predates
+            # it. Downloading here rather than via actions/download-artifact keeps a
+            # miss from posting a spurious failure annotation.
+            gh run download "${PREV}" -n spellcheck-inputs -D "${RUNNER_TEMP}" 2>/dev/null || true
+            if [ -f "${RUNNER_TEMP}/inputs.json" ]; then
               repository=$(jq -r '.repository // ""' "${RUNNER_TEMP}/inputs.json")
               ignore=$(jq -r '.ignore // ""' "${RUNNER_TEMP}/inputs.json")
               skip=$(jq -r '.skip // ""' "${RUNNER_TEMP}/inputs.json")
