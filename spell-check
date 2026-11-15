@@ -2,16 +2,6 @@
 
 # spell-check: A standalone CLI tool for spell checking repositories
 # Uses codespell to find and fix spelling errors in markdown and text files
-#
-# Adapted for the spell-check skill from vladdoster/spell- (spell-check zsh CLI).
-# Behavioral divergences from the source script, each forced by a real failure
-# or safety issue on macOS (see SKILL.md Gotchas):
-#   - file selection uses a zsh recursive glob (GNU `find -regextype` does not
-#     exist on BSD find)
-#   - clone goes to a mktemp -d dir, not ./target-repo (a skill runs from the
-#     user's project; `rm -rf target-repo` in their CWD is not acceptable)
-#   - adds -n/--dry-run: stop after the report, never fork/push/delete
-#   - GH_TOKEN falls back to `gh auth token` (keyring auth leaves the env unset)
 
 set -e
 setopt ERR_EXIT PIPE_FAIL EXTENDED_GLOB
@@ -63,6 +53,7 @@ REQUIREMENTS:
   - gh (GitHub CLI, authenticated)
   - uv (Python package manager)
   - git
+  - jq
 
 EOF
   exit 0
