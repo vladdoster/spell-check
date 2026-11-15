@@ -75,8 +75,7 @@ jobs:
     environment: Delete fork
     needs: spellcheck
     # Only a run that pushed has a fork to remove. A dry run and a clean target both
-    # leave `pushed` empty, so this subsumes the old dry-run gate and stops a no-op
-    # run from parking a pending approval on the Delete fork environment.
+    # leave `pushed` empty, so neither waits for approval on the Delete fork environment.
     if: ${{ needs.spellcheck.outputs.pushed == 'true' }}
     steps:
       - name: Checkout action

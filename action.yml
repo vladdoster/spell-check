@@ -1,4 +1,4 @@
-name: "Codespell Fixer"
+name: "spell-check"
 description: "Codespell a target repository and push spelling fixes to a fork."
 branding:
   icon: "check-circle"

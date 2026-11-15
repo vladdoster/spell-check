@@ -1,6 +1,5 @@
 #!/bin/sh
 # entrypoint.sh — Docker container action: codespell a target repo and push fixes to a fork.
-# POSIX sh. Preserves the behavior of the former inline spell-check workflow.
 set -eux
 
 # Problem matchers run on the VM, outside this container, so the matcher config must
@@ -141,7 +140,7 @@ set -- --count --quiet-level 11 --summary --write-changes
 
 step_summary "#### arguments\n- skip: ${skip_list:-<none>}\n- ignore: ${ignore_words:-<none>}\n"
 
-# codespell exits non-zero when it finds/writes fixes; don't abort (was continue-on-error).
+# codespell exits non-zero when it finds/writes fixes; don't abort.
 # Release/legal docs are excluded — they quote historical text verbatim.
 list_spell_targets | xargs -0 -r codespell "$@" || true
 

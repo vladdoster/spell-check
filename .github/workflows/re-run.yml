@@ -132,9 +132,8 @@ jobs:
           set -eu
           repository="" skip="" ignore="" source="none"
           if [ -n "${PREV}" ]; then
-            # A miss means the artifact expired (30-day retention) or the run predates
-            # it. Downloading here rather than via actions/download-artifact keeps a
-            # miss from posting a spurious failure annotation.
+            # Artifacts expire after 30 days. Use gh, not actions/download-artifact,
+            # so a miss posts no failure annotation.
             gh run download "${PREV}" -n spellcheck-inputs -D "${RUNNER_TEMP}" 2>/dev/null || true
             if [ -f "${RUNNER_TEMP}/inputs.json" ]; then
               repository=$(jq -r '.repository // ""' "${RUNNER_TEMP}/inputs.json")
