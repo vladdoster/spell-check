@@ -1,0 +1,32 @@
+FROM alpine:3.24
+
+LABEL org.opencontainers.image.source=https://github.com/vladdoster/spell-check
+
+# Set by BuildKit per platform (amd64, arm64); it matches gh's release asset names.
+ARG TARGETARCH
+
+# git + python from Alpine. gh comes from its upstream release because Alpine's
+# github-cli package lags several versions behind.
+RUN set -eux; \
+  apk add --no-cache git python3; \
+  apk add --no-cache --virtual .gh-deps curl; \
+  latest="$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest)"; \
+  ver="${latest##*/v}"; \
+  asset="gh_${ver}_linux_${TARGETARCH}.tar.gz"; \
+  cd /tmp; \
+  curl -fsSLO "https://github.com/cli/cli/releases/download/v${ver}/${asset}"; \
+  curl -fsSLO "https://github.com/cli/cli/releases/download/v${ver}/gh_${ver}_checksums.txt"; \
+  sum="$(awk -v a="${asset}" '$2 == a {print $1}' "gh_${ver}_checksums.txt")"; \
+  [ -n "${sum}" ]; \
+  echo "${sum}  ${asset}" | sha256sum -c -; \
+  tar -xzf "${asset}"; \
+  install -m 0755 "gh_${ver}_linux_${TARGETARCH}/bin/gh" /usr/local/bin/gh; \
+  rm -rf /tmp/gh_*; \
+  apk del .gh-deps
+
+# codespell (pinned for reproducibility).
+# pip is only needed to install it, so it is removed in the same layer.
+RUN set -eux; \
+  apk add --no-cache --virtual .pip-deps py3-pip; \
+  pip install --break-system-packages --no-cache-dir codespell==2.4.2; \
+  apk del .pip-deps
