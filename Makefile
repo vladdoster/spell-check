@@ -1,4 +1,4 @@
-IMAGE ?= speller
+IMAGE ?= spell-check
 TAG ?= latest
 IMAGE_REF = $(IMAGE):$(TAG)
 

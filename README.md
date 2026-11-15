@@ -1,4 +1,4 @@
-# speller
+# spell-check
 
 [![Spell Check](https://github.com/vladdoster/spell-check/actions/workflows/spell-check.yml/badge.svg)](https://github.com/vladdoster/spell-check/actions/workflows/spell-check.yml)
 
