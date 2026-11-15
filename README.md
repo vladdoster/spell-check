@@ -21,6 +21,10 @@ CI runs the spell-fix pipeline as a **Docker container action** (`action.yml` + 
 and when it finds fixes it forks the repo and pushes them to a `docs/fix-spelling` branch for you
 to open a pull request. A second, approval-gated `Delete fork` job cleans up the fork.
 
+`Dockerfile.base` defines the toolchain (Python, git, gh, codespell). The
+[Base Image workflow](.github/workflows/base-image.yml) publishes it to `ghcr.io/vladdoster/spell-check-base`
+on every change and once a week. The action's `Dockerfile` adds only `entrypoint.sh`, so runs skip the toolchain build.
+
 ### Action inputs
 
 | Input          | Required | Description                                                      |
